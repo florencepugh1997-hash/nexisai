@@ -9,14 +9,11 @@ import { cn } from '@/lib/utils'
 
 const MESSAGES = [
   'Analyzing your business profile…',
-  'Identifying your growth gaps…',
-  'Researching your industry landscape…',
   'Building your 90-day strategy…',
-  'Preparing your Day 1 plan…',
-  'Finalizing your growth plan…',
+  'Almost ready…',
 ]
 
-const ROTATE_MS = 2000
+const ROTATE_MS = 3000
 
 export default function AnalyzingPage() {
   const router = useRouter()
@@ -135,20 +132,16 @@ export default function AnalyzingPage() {
         return
       }
 
-      // Generate Day 1 Auto
-      setAlmostThere(true) // force almost there UI if fast
-      await fetch('/api/generate-daily-plan', {
+      // Fire and forget - don't await
+      fetch('/api/generate-daily-plan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           user_id: userId, 
           day_number: 1, 
           growth_plan_id: insertedPlan.id 
-        }),
-        signal: ac.signal
-      }).catch(err => console.error('Failed auto day 1 generation', err))
-
-      if (ac.signal.aborted) return
+        })
+      }).catch(err => console.error('Failed background day 1 generation', err))
 
       router.push('/dashboard')
     })().catch((err) => {

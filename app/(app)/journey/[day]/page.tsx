@@ -321,11 +321,16 @@ export default function DailyPlanPage({ params }: { params: Promise<{ day: strin
 
   if (loading || isGeneratingDay1) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center space-y-4">
-        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+      <div className="flex min-h-screen flex-col items-center justify-center space-y-6 px-6 text-center">
+        <Loader2 className="h-10 w-10 animate-spin text-primary/80" strokeWidth={1.5} />
         {isGeneratingDay1 ? (
-          <p className="text-sm text-foreground animate-pulse font-medium">Generating your Day 1 plan, please wait...</p>
-        ) : null}
+          <div className="space-y-2 animate-pulse">
+            <p className="text-lg font-display font-bold text-foreground">Your Day 1 plan is being prepared...</p>
+            <p className="text-sm text-muted-foreground max-w-[280px]">This usually takes 1-2 minutes. It will appear automatically when ready.</p>
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">Loading...</p>
+        )}
       </div>
     )
   }
