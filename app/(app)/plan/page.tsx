@@ -139,7 +139,7 @@ function LockedCard({
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
-export default function PlanPage() {
+function PlanPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { user } = useNexisUser()
@@ -287,5 +287,13 @@ export default function PlanPage() {
         </Card>
       )}
     </div>
+  )
+}
+
+export default function PlanPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
+      <PlanPageContent />
+    </Suspense>
   )
 }
