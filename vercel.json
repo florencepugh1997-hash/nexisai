@@ -1,4 +1,15 @@
 {
+  "functions": {
+    "app/api/generate-daily-plan/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/generate-plan/route.js": {
+      "maxDuration": 60
+    },
+    "app/api/unlock-next-day/route.ts": {
+      "maxDuration": 60
+    }
+  },
   "crons": [
     {
       "path": "/api/check-trials",

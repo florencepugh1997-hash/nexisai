@@ -1,3 +1,4 @@
+export const maxDuration = 60
 import { generateDailyPlanLogic } from '@/lib/daily-plan-logic';
 import { supabase } from '@/lib/supabase';
 import { getTrialStatus } from '@/lib/trial-logic';

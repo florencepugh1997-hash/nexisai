@@ -26,6 +26,8 @@ export default function DailyPlanPage({ params }: { params: Promise<{ day: strin
   const [isFormUnlocked, setIsFormUnlocked] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isGeneratingDay1, setIsGeneratingDay1] = useState(false)
+  const [pollingStartTime, setPollingStartTime] = useState<number | null>(null)
+  const [showRetry, setShowRetry] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   
   const [nextUnlockAt, setNextUnlockAt] = useState<string | null>(null)
@@ -96,6 +98,7 @@ export default function DailyPlanPage({ params }: { params: Promise<{ day: strin
 
           if (dayNumber === 1) {
             setIsGeneratingDay1(true)
+            setPollingStartTime(Date.now())
             
             const { data: growthPlan } = await supabase
               .from('growth_plans')
@@ -122,7 +125,7 @@ export default function DailyPlanPage({ params }: { params: Promise<{ day: strin
               })
             }).catch(console.error)
             
-            // Poll every 3 seconds
+            // Poll every 5 seconds
             const poll = async () => {
               const { data: newPlan } = await supabase
                 .from('daily_plans')
@@ -146,11 +149,21 @@ export default function DailyPlanPage({ params }: { params: Promise<{ day: strin
                 setPlan(newPlan)
                 updateTimer(newPlan.first_opened_at)
                 setIsGeneratingDay1(false)
+                setShowRetry(false)
                 setLoading(false)
               } else {
-                setTimeout(poll, 3000)
+                // Check for timeout if we have a start time
+                // Use a functional update or closure value if necessary, but here we can check Date.now()
+                // Accessing pollingStartTime from outer scope in the poll function
+                const startTime = (window as any)._pollingStart || Date.now()
+                if (Date.now() - startTime > 3 * 60 * 1000) {
+                  setShowRetry(true)
+                }
+                setTimeout(poll, 5000)
               }
             }
+            // Store start time globally for the poll closure to handle accurately if it refers to stale state
+            ;(window as any)._pollingStart = Date.now()
             poll()
             return // skip the rest of the effect, polling handles it
           } else {
@@ -251,6 +264,35 @@ export default function DailyPlanPage({ params }: { params: Promise<{ day: strin
     }
   }
 
+  const handleRetryGeneration = async () => {
+    setShowRetry(false)
+    const now = Date.now()
+    setPollingStartTime(now)
+    ;(window as any)._pollingStart = now
+    
+    const { data: { user: authUser } } = await supabase.auth.getUser()
+    if (!authUser) return
+
+    const { data: growthPlan } = await supabase
+      .from('growth_plans')
+      .select('id')
+      .eq('user_id', authUser.id)
+      .eq('is_current', true)
+      .maybeSingle()
+
+    if (growthPlan) {
+      fetch('/api/generate-daily-plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          user_id: authUser.id, 
+          day_number: 1,
+          growth_plan_id: growthPlan.id
+        })
+      }).catch(console.error)
+    }
+  }
+
   const handleNextDay = async () => {
     setIsUnlocking(true)
     const { data: { user: authUser } } = await supabase.auth.getUser()
@@ -324,9 +366,20 @@ export default function DailyPlanPage({ params }: { params: Promise<{ day: strin
       <div className="flex min-h-screen flex-col items-center justify-center space-y-6 px-6 text-center">
         <Loader2 className="h-10 w-10 animate-spin text-primary/80" strokeWidth={1.5} />
         {isGeneratingDay1 ? (
-          <div className="space-y-2 animate-pulse">
-            <p className="text-lg font-display font-bold text-foreground">Your Day 1 plan is being prepared...</p>
-            <p className="text-sm text-muted-foreground max-w-[280px]">This usually takes 1-2 minutes. It will appear automatically when ready.</p>
+          <div className="space-y-4 animate-pulse flex flex-col items-center">
+            <p className="text-lg font-display font-bold text-foreground">
+              {showRetry ? "Taking longer than expected..." : "Your Day 1 plan is being prepared..."}
+            </p>
+            <p className="text-sm text-muted-foreground max-w-[280px]">
+              {showRetry 
+                ? "The AI model might be busy. Please tap to retry the generation." 
+                : "This usually takes 1-2 minutes. It will appear automatically when ready."}
+            </p>
+            {showRetry && (
+              <GlowButton onClick={handleRetryGeneration} className="mt-2 rounded-xl px-8">
+                Tap to retry
+              </GlowButton>
+            )}
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">Loading...</p>

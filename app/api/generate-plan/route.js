@@ -1,3 +1,4 @@
+export const maxDuration = 60
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages'
 
 function formatChannels(channels) {
