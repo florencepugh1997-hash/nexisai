@@ -125,15 +125,22 @@ export default function DailyPlanPage({ params }: { params: Promise<{ day: strin
               })
             }).catch(console.error)
             
-            // Poll every 5 seconds
+            // Poll every 3 seconds
             const poll = async () => {
-              const { data: newPlan } = await supabase
+              const { data: { user: pollUser } } = await supabase.auth.getUser()
+              if (!pollUser) return
+
+              console.log('Polling for plan - user id:', pollUser.id, 'day:', dayNumber)
+              
+              const { data: newPlan, error: pollError } = await supabase
                 .from('daily_plans')
                 .select('*')
-                .eq('user_id', authUser.id)
+                .eq('user_id', pollUser.id)
                 .eq('day_number', dayNumber)
                 .maybeSingle()
                 
+              console.log('Poll result - plan:', newPlan?.id, 'error:', pollError?.message)
+
               if (newPlan?.content) {
                 if (!newPlan.is_unlocked) {
                   newPlan.is_unlocked = true
@@ -152,17 +159,13 @@ export default function DailyPlanPage({ params }: { params: Promise<{ day: strin
                 setShowRetry(false)
                 setLoading(false)
               } else {
-                // Check for timeout if we have a start time
-                // Use a functional update or closure value if necessary, but here we can check Date.now()
-                // Accessing pollingStartTime from outer scope in the poll function
                 const startTime = (window as any)._pollingStart || Date.now()
                 if (Date.now() - startTime > 3 * 60 * 1000) {
                   setShowRetry(true)
                 }
-                setTimeout(poll, 5000)
+                setTimeout(poll, 3000)
               }
             }
-            // Store start time globally for the poll closure to handle accurately if it refers to stale state
             ;(window as any)._pollingStart = Date.now()
             poll()
             return // skip the rest of the effect, polling handles it
