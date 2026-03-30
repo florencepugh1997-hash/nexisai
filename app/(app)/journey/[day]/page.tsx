@@ -103,75 +103,66 @@ export default function DailyPlanPage({ params }: { params: Promise<{ day: strin
               return
             }
 
-            // Trigger generation
+            // Trigger generation and stream
             if (!hasTriggeredGenerationRef.current) {
               hasTriggeredGenerationRef.current = true
-              fetch('/api/generate-daily-plan', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                  user_id: authUser.id, 
-                  day_number: 1,
-                  growth_plan_id: growthPlan.id
-                })
-              }).catch(err => {
-                console.error(err)
-                hasTriggeredGenerationRef.current = false
-              })
+              
+              const startStream = async () => {
+                try {
+                  const res = await fetch('/api/generate-daily-plan', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                      user_id: authUser.id, 
+                      day_number: 1,
+                      growth_plan_id: growthPlan.id
+                    })
+                  });
+                  
+                  if (!res.ok) throw new Error('Failed to generate daily plan');
+                  if (!res.body) throw new Error('No readable stream available');
+                  
+                  setIsGeneratingDay1(false);
+                  setLoading(false);
+                  setShowRetry(false);
+                  
+                  const nowStr = new Date().toISOString()
+                  const activePlan = { 
+                    id: 'temp-' + Date.now(),
+                    content: '', 
+                    is_unlocked: true, 
+                    first_opened_at: nowStr 
+                  };
+                  
+                  setPlan({ ...activePlan });
+                  updateTimer(nowStr);
+                  
+                  const reader = res.body.getReader();
+                  const decoder = new TextDecoder('utf-8');
+                  
+                  while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    
+                    const chunk = decoder.decode(value, { stream: true });
+                    activePlan.content += chunk;
+                    
+                    // Force UI update
+                    setPlan({ ...activePlan });
+                  }
+                  
+                } catch (err) {
+                  console.error(err);
+                  setError('Generation failed. Please refresh the page.');
+                  setShowRetry(true);
+                  hasTriggeredGenerationRef.current = false;
+                }
+              };
+              
+              startStream();
             }
             
-            // Poll every 3 seconds
-            const poll = async () => {
-              if (isPollingRef.current) return
-              isPollingRef.current = true
-
-              const { data: { user: pollUser } } = await supabase.auth.getUser()
-              if (!pollUser) {
-                isPollingRef.current = false
-                return
-              }
-
-              console.log('Polling for plan - user id:', pollUser.id, 'day:', dayNumber)
-              
-              const { data: newPlan, error: pollError } = await supabase
-                .from('daily_plans')
-                .select('*')
-                .eq('user_id', pollUser.id)
-                .eq('day_number', dayNumber)
-                .maybeSingle()
-                
-              console.log('Poll result - plan:', newPlan?.id, 'error:', pollError?.message)
-
-              if (newPlan?.content) {
-                isPollingRef.current = false
-                if (!newPlan.is_unlocked) {
-                  newPlan.is_unlocked = true
-                  await supabase.from('daily_plans').update({ is_unlocked: true }).eq('id', newPlan.id)
-                }
-                
-                if (!newPlan.first_opened_at) {
-                  const nowStr = new Date().toISOString()
-                  await supabase.from('daily_plans').update({ first_opened_at: nowStr }).eq('id', newPlan.id)
-                  newPlan.first_opened_at = nowStr
-                }
-                
-                setPlan(newPlan)
-                updateTimer(newPlan.first_opened_at)
-                setIsGeneratingDay1(false)
-                setShowRetry(false)
-                setLoading(false)
-              } else {
-                isPollingRef.current = false
-                const startTime = (window as any)._pollingStart || Date.now()
-                if (Date.now() - startTime > 3 * 60 * 1000) {
-                  setShowRetry(true)
-                }
-                setTimeout(poll, 3000)
-              }
-            }
-            ;(window as any)._pollingStart = Date.now()
-            poll()
-            return // skip the rest of the effect, polling handles it
+            return // skip the rest of the effect, stream handles it
           } else {
             setError('This day is not available or locked.')
             setLoading(false)

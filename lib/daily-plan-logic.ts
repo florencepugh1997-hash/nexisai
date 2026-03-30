@@ -89,7 +89,7 @@ export async function generateDailyPlanLogic({ user_id, day_number, growth_plan_
   }
 
   console.log(`Starting generation for day ${day_number}`);
-  
+
   if (!user_id || !day_number) {
     throw new Error('Missing required fields');
   }
@@ -118,7 +118,7 @@ export async function generateDailyPlanLogic({ user_id, day_number, growth_plan_
     .from('growth_plans')
     .select('*')
     .eq('user_id', user_id);
-  
+
   if (growth_plan_id) {
     planQuery = planQuery.eq('id', growth_plan_id);
   } else {
@@ -178,9 +178,9 @@ export async function generateDailyPlanLogic({ user_id, day_number, growth_plan_
   } catch {
     data = { error: { message: 'Raw Proxy HTML: ' + rawText.substring(0, 200) } };
   }
-  
+
   console.log(`Claude API response status: ${anthropicRes.status}`);
-  
+
   if (!anthropicRes.ok) {
     console.log('Claude error:', JSON.stringify(data));
     throw new Error(data.error?.message ?? 'Anthropic API error');
@@ -188,7 +188,7 @@ export async function generateDailyPlanLogic({ user_id, day_number, growth_plan_
 
   const planContent = data.content?.[0]?.text;
   console.log(`Plan content length: ${planContent ? planContent.length : 0}`);
-  
+
   if (!planContent) {
     throw new Error('Empty response from model');
   }
@@ -199,7 +199,7 @@ export async function generateDailyPlanLogic({ user_id, day_number, growth_plan_
     .select('is_subscribed')
     .eq('id', user_id)
     .single();
-    
+
   const isSubscribed = !!userProfile?.is_subscribed;
   const isUnlocked = day_number === 1 || isSubscribed;
 
@@ -219,7 +219,7 @@ export async function generateDailyPlanLogic({ user_id, day_number, growth_plan_
       unlocked_at: isUnlocked ? new Date().toISOString() : null,
       growth_plan_id
     }).eq('id', existingPlan.id);
-    
+
     if (updateError) {
       console.error('Update Error:', updateError);
       throw new Error('Failed to update daily plan in database.');
@@ -235,7 +235,7 @@ export async function generateDailyPlanLogic({ user_id, day_number, growth_plan_
         .eq('user_id', user_id)
         .eq('day_number', day_number - 1)
         .maybeSingle();
-      
+
       final_growth_plan_id = currentDayPlan?.growth_plan_id;
     }
 
@@ -246,7 +246,7 @@ export async function generateDailyPlanLogic({ user_id, day_number, growth_plan_
         .eq('user_id', user_id)
         .eq('is_current', true)
         .maybeSingle();
-      
+
       final_growth_plan_id = growthPlan?.id;
     }
 
@@ -272,7 +272,7 @@ export async function generateDailyPlanLogic({ user_id, day_number, growth_plan_
     }));
 
     const { error: insertError } = await supabaseAdmin.from('daily_plans').insert(payload);
-    
+
     if (insertError) {
       console.log('Insert error details:', JSON.stringify(insertError))
       console.log('Insert error code:', insertError.code)
@@ -314,12 +314,12 @@ export async function unlockNextDayLogic({ user_id, current_day_number, force = 
   }
 
   let canUnlock = force;
-  
+
   if (!canUnlock) {
     const openedAt = new Date(currentPlan.first_opened_at).getTime();
     const unlockTime = openedAt + (16 * 60 * 60 * 1000);
     const now = Date.now();
-    
+
     if (now >= unlockTime) {
       canUnlock = true;
     } else {
@@ -364,4 +364,154 @@ export async function unlockNextDayLogic({ user_id, current_day_number, force = 
   }
 
   return { unlocked: true };
+}
+
+export async function generateDailyPlanStream({ user_id, day_number, growth_plan_id }: { user_id: string, day_number: number, growth_plan_id?: string }) {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) throw new Error('Server misconfiguration: ANTHROPIC_API_KEY is not set.');
+
+  if (!user_id || !day_number) {
+    throw new Error('Missing required fields');
+  }
+
+  const supabaseAdmin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+
+  const { data: profile } = await supabaseAdmin.from('business_profiles').select('*').eq('user_id', user_id).single();
+  if (!profile) throw new Error('Business profile not found in database.');
+
+  let planQuery = supabaseAdmin.from('growth_plans').select('*').eq('user_id', user_id);
+  if (growth_plan_id) planQuery = planQuery.eq('id', growth_plan_id);
+  else planQuery = planQuery.eq('is_current', true);
+
+  const { data: overviewPlan } = await planQuery.single();
+  if (!overviewPlan) throw new Error('Overview growth plan not found in database.');
+
+  let yesterday_submission = null;
+  if (day_number > 1) {
+    const { data: sub } = await supabaseAdmin.from('daily_submissions').select('*').eq('user_id', user_id).eq('day_number', day_number - 1).single();
+    yesterday_submission = sub;
+  }
+
+  const prompt = buildPrompt({
+    day_number,
+    business_name: profile.business_name || 'your business',
+    industry: profile.industry || 'your industry',
+    current_stage: profile.current_stage || 'your current stage',
+    target_audience: profile.target_audience || 'your audience',
+    biggest_challenge: profile.biggest_challenge || 'your biggest challenge',
+    monthly_budget: profile.monthly_budget || 'your budget',
+    overview_plan: overviewPlan.content,
+    yesterday_submission
+  });
+
+  const anthropicRes = await fetch(ANTHROPIC_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-5',
+      max_tokens: 4000,
+      stream: true,
+      messages: [{ role: 'user', content: prompt }],
+    }),
+  });
+
+  if (!anthropicRes.ok) {
+    throw new Error('Anthropic API error: ' + anthropicRes.status);
+  }
+
+  return new ReadableStream({
+    async start(controller) {
+      const reader = anthropicRes.body?.getReader();
+      if (!reader) {
+        controller.close();
+        return;
+      }
+      
+      const encoder = new TextEncoder();
+      const decoder = new TextDecoder('utf-8');
+      let buffer = '';
+      let fullPlanContent = '';
+      
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+          
+          for (const line of lines) {
+            if (line.startsWith('data: ') && line !== 'data: [DONE]') {
+              try {
+                const data = JSON.parse(line.slice(6));
+                if (data.type === 'content_block_delta' && data.delta?.text) {
+                  fullPlanContent += data.delta.text;
+                  controller.enqueue(encoder.encode(data.delta.text));
+                }
+              } catch (e) {
+                // ignore partial JSON parse errors
+              }
+            }
+          }
+        }
+        
+        // flush remaining buffer
+        if (buffer.startsWith('data: ') && buffer !== 'data: [DONE]') {
+           try {
+             const data = JSON.parse(buffer.slice(6));
+             if (data.type === 'content_block_delta' && data.delta?.text) {
+               fullPlanContent += data.delta.text;
+               controller.enqueue(encoder.encode(data.delta.text));
+             }
+           } catch { }
+        }
+
+        controller.close();
+
+        // Save string to database natively!
+        const { data: userProfile } = await supabaseAdmin.from('profiles').select('is_subscribed').eq('id', user_id).single();
+        const isUnlocked = day_number === 1 || !!userProfile?.is_subscribed;
+
+        const { data: existingPlan } = await supabaseAdmin.from('daily_plans').select('id').eq('user_id', user_id).eq('day_number', day_number).single();
+
+        if (existingPlan) {
+          await supabaseAdmin.from('daily_plans').update({
+            content: fullPlanContent,
+            is_unlocked: isUnlocked,
+            unlocked_at: isUnlocked ? new Date().toISOString() : null,
+            growth_plan_id
+          }).eq('id', existingPlan.id);
+        } else {
+          let final_growth_plan_id = growth_plan_id;
+          if (!final_growth_plan_id && day_number > 1) {
+            const { data: currentDayPlan } = await supabaseAdmin.from('daily_plans').select('growth_plan_id').eq('user_id', user_id).eq('day_number', day_number - 1).maybeSingle();
+            final_growth_plan_id = currentDayPlan?.growth_plan_id;
+          }
+          if (!final_growth_plan_id) {
+            const { data: growthPlan } = await supabaseAdmin.from('growth_plans').select('id').eq('user_id', user_id).eq('is_current', true).maybeSingle();
+            final_growth_plan_id = growthPlan?.id;
+          }
+          await supabaseAdmin.from('daily_plans').insert({
+            user_id,
+            day_number,
+            growth_plan_id: final_growth_plan_id,
+            content: fullPlanContent,
+            is_unlocked: isUnlocked,
+            unlocked_at: isUnlocked ? new Date().toISOString() : null
+          });
+        }
+      } catch (err) {
+        console.error("Stream generation error:", err);
+        controller.error(err);
+      }
+    }
+  });
 }

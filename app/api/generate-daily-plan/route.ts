@@ -1,5 +1,4 @@
-export const maxDuration = 60
-import { generateDailyPlanLogic } from '@/lib/daily-plan-logic';
+import { generateDailyPlanStream } from '@/lib/daily-plan-logic';
 import { supabase } from '@/lib/supabase';
 import { getTrialStatus } from '@/lib/trial-logic';
 
@@ -22,8 +21,13 @@ export async function POST(request: Request) {
       }
     }
 
-    const result = await generateDailyPlanLogic(body);
-    return Response.json(result);
+    const stream = await generateDailyPlanStream(body);
+    return new Response(stream, { 
+      headers: { 
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Cache-Control': 'no-cache, no-transform'
+      } 
+    });
   } catch (err: any) {
     console.error('[generate-daily-plan] error:', err);
     return Response.json({ error: err?.message || 'Internal Server Error' }, { status: 500 });
