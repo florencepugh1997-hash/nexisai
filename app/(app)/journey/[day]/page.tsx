@@ -1,6 +1,6 @@
 'use client'
 
-import { use, useEffect, useState } from 'react'
+import { use, useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Check, ChevronLeft, Loader2, Lock, Star } from 'lucide-react'
 import Link from 'next/link'
@@ -47,30 +47,19 @@ export default function DailyPlanPage({ params }: { params: Promise<{ day: strin
     help_needed_tomorrow: ''
   })
 
+  // Loading Refs to prevent duplicate calls
+  const isPollingRef = useRef(false)
+  const hasTriggeredGenerationRef = useRef(false)
+
   useEffect(() => {
     if (isNaN(dayNumber) || dayNumber < 1) {
       router.replace('/journey')
       return
     }
 
-    if (nextUnlockAt) {
-      const interval = setInterval(() => {
-        const diffMs = new Date(nextUnlockAt).getTime() - new Date().getTime();
-        if (diffMs <= 0) {
-          setNextUnlockAt(null);
-          setUnlockTimeLeft(null);
-          clearInterval(interval);
-          // Auto unlock when countdown completes
-          handleNextDay();
-        } else {
-          const h = Math.floor(diffMs / (1000 * 60 * 60));
-          const m = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-          const s = Math.floor((diffMs % (1000 * 60)) / 1000);
-          setUnlockTimeLeft({ hours: h, minutes: m, seconds: s });
-        }
-      }, 1000);
-      return () => clearInterval(interval);
-    }
+    // Reset refs on day change
+    isPollingRef.current = false
+    hasTriggeredGenerationRef.current = false
 
     supabase.auth.getUser().then(async ({ data: { user: authUser } }) => {
       if (!authUser) {
@@ -115,20 +104,32 @@ export default function DailyPlanPage({ params }: { params: Promise<{ day: strin
             }
 
             // Trigger generation
-            fetch('/api/generate-daily-plan', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ 
-                user_id: authUser.id, 
-                day_number: 1,
-                growth_plan_id: growthPlan.id
+            if (!hasTriggeredGenerationRef.current) {
+              hasTriggeredGenerationRef.current = true
+              fetch('/api/generate-daily-plan', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                  user_id: authUser.id, 
+                  day_number: 1,
+                  growth_plan_id: growthPlan.id
+                })
+              }).catch(err => {
+                console.error(err)
+                hasTriggeredGenerationRef.current = false
               })
-            }).catch(console.error)
+            }
             
             // Poll every 3 seconds
             const poll = async () => {
+              if (isPollingRef.current) return
+              isPollingRef.current = true
+
               const { data: { user: pollUser } } = await supabase.auth.getUser()
-              if (!pollUser) return
+              if (!pollUser) {
+                isPollingRef.current = false
+                return
+              }
 
               console.log('Polling for plan - user id:', pollUser.id, 'day:', dayNumber)
               
@@ -142,6 +143,7 @@ export default function DailyPlanPage({ params }: { params: Promise<{ day: strin
               console.log('Poll result - plan:', newPlan?.id, 'error:', pollError?.message)
 
               if (newPlan?.content) {
+                isPollingRef.current = false
                 if (!newPlan.is_unlocked) {
                   newPlan.is_unlocked = true
                   await supabase.from('daily_plans').update({ is_unlocked: true }).eq('id', newPlan.id)
@@ -159,6 +161,7 @@ export default function DailyPlanPage({ params }: { params: Promise<{ day: strin
                 setShowRetry(false)
                 setLoading(false)
               } else {
+                isPollingRef.current = false
                 const startTime = (window as any)._pollingStart || Date.now()
                 if (Date.now() - startTime > 3 * 60 * 1000) {
                   setShowRetry(true)
@@ -246,7 +249,29 @@ export default function DailyPlanPage({ params }: { params: Promise<{ day: strin
         setLoading(false)
       }
     })
-  }, [dayNumber, router, nextUnlockAt])
+  }, [dayNumber, router])
+
+  // Countdown effect for nextUnlockAt
+  useEffect(() => {
+    if (!nextUnlockAt) return
+    
+    const interval = setInterval(() => {
+      const diffMs = new Date(nextUnlockAt).getTime() - new Date().getTime();
+      if (diffMs <= 0) {
+        setNextUnlockAt(null);
+        setUnlockTimeLeft(null);
+        clearInterval(interval);
+        handleNextDay();
+      } else {
+        const h = Math.floor(diffMs / (1000 * 60 * 60));
+        const m = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+        const s = Math.floor((diffMs % (1000 * 60)) / 1000);
+        setUnlockTimeLeft({ hours: h, minutes: m, seconds: s });
+      }
+    }, 1000);
+    
+    return () => clearInterval(interval);
+  }, [nextUnlockAt])
 
   const updateTimer = (openedAtIso: string) => {
     const openedAt = new Date(openedAtIso).getTime()
