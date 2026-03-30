@@ -165,7 +165,7 @@ export async function generateDailyPlanLogic({ user_id, day_number, growth_plan_
     },
     body: JSON.stringify({
       model: 'claude-sonnet-4-5',
-      max_tokens: 4096,
+      max_tokens: 4000,
       stream: false,
       messages: [{ role: 'user', content: prompt }],
     }),
