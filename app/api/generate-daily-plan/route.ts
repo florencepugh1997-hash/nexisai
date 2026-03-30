@@ -13,10 +13,13 @@ export async function POST(request: Request) {
     }
 
     const { data: profile } = await supabase.from('profiles').select('trial_end_date, is_trial_active, is_subscribed').eq('id', body.user_id).maybeSingle();
-    const tStatus = getTrialStatus(profile);
-    
-    if (tStatus.isExpired && !tStatus.isSubscribed) {
-       return Response.json({ error: 'Trial expired. Please subscribe to continue.' }, { status: 403 });
+    console.log('Trial check - profile:', profile?.trial_end_date, 'is_subscribed:', profile?.is_subscribed)
+
+    if (profile && profile.trial_end_date) {
+      const tStatus = getTrialStatus(profile)
+      if (tStatus.isExpired && !tStatus.isSubscribed) {
+         return Response.json({ error: 'Trial expired. Please subscribe to continue.' }, { status: 403 });
+      }
     }
 
     const result = await generateDailyPlanLogic(body);
