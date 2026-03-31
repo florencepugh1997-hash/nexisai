@@ -3,7 +3,7 @@ import { Resend } from 'resend'
 const resend = new Resend(process.env.RESEND_API_KEY)
 
 // TODO: Replace with your custom domain email before launch
-const FROM_EMAIL = 'onboarding@resend.dev'
+const FROM_EMAIL = 'hello@nexis.ng'
 
 const STYLES = {
   container: 'background-color: #0A0A0F; color: #f4f4f5; font-family: sans-serif; padding: 40px 20px; text-align: center;',
