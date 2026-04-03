@@ -1,13 +1,18 @@
 export const maxDuration = 60
+
+import { prisma } from '@/lib/prisma'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages'
 
-function formatChannels(channels) {
+function formatChannels(channels: any) {
   if (channels == null) return 'Not specified'
   if (Array.isArray(channels)) return channels.length ? channels.join(', ') : 'None selected'
   return String(channels)
 }
 
-function buildPrompt(profile) {
+function buildPrompt(profile: any) {
   const business_name = profile.business_name ?? ''
   const industry = profile.industry ?? ''
   const description = profile.description ?? ''
@@ -57,8 +62,14 @@ Write 2 full paragraphs describing simple metrics and weekly habits they should 
 End with one short encouraging closing paragraph addressed directly to the business owner by business name.`
 }
 
-export async function POST(request) {
+export async function POST(request: Request) {
   try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.id) {
+       return Response.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const userId = session.user.id
+
     const apiKey = process.env.ANTHROPIC_API_KEY
     if (!apiKey) {
       return Response.json(
@@ -67,14 +78,17 @@ export async function POST(request) {
       )
     }
 
-    let body
-    try {
-      body = await request.json()
-    } catch {
-      return Response.json({ error: 'Invalid JSON body.' }, { status: 400 })
+    const profile = await prisma.businessProfile.findUnique({
+      where: { userId }
+    })
+
+    if (!profile) {
+      return Response.json(
+        { error: 'Could not load your business profile. Please try again.' },
+        { status: 404 }
+      )
     }
 
-    const profile = body ?? {}
     const required = [
       'business_name',
       'industry',
@@ -84,11 +98,13 @@ export async function POST(request) {
       'biggest_challenge',
       'monthly_budget',
       'revenue_goal',
-    ]
+    ] as const
+
     const missing = required.filter((k) => {
-      const v = profile[k]
+      const v = profile[k] as string | null | undefined
       return v == null || (typeof v === 'string' && !v.trim())
     })
+    
     if (missing.length) {
       return Response.json(
         { error: `Missing required fields: ${missing.join(', ')}` },
@@ -126,7 +142,6 @@ export async function POST(request) {
 
     const data = await anthropicRes.json()
     console.log('[generate-plan] status:', anthropicRes.status)
-    console.log('[generate-plan] data:', JSON.stringify(data))
 
     if (!anthropicRes.ok) {
       return Response.json(
@@ -135,15 +150,48 @@ export async function POST(request) {
       )
     }
 
-    const plan = data.content[0].text
+    const plan = data.content?.[0]?.text
 
     if (!plan) {
       return Response.json({ error: 'Empty response from model.' }, { status: 502 })
     }
 
-    return Response.json({ plan })
+    // Mark any existing plans as no longer current
+    await prisma.growthPlan.updateMany({
+      where: { userId },
+      data: { is_current: false }
+    })
 
-  } catch (err) {
+    // Save the new plan
+    const insertedPlan = await prisma.growthPlan.create({
+      data: {
+        userId,
+        content: plan,
+        is_current: true
+      }
+    })
+
+    // Fire and forget day 1 generation
+    try {
+      const headersList = Object.fromEntries(request.headers.entries())
+      const baseUrl = request.headers.get('origin') || `http://localhost:${process.env.PORT || 3000}`
+      fetch(`${baseUrl}/api/generate-daily-plan`, {
+        method: 'POST',
+        headers: { 
+           'Content-Type': 'application/json',
+           cookie: headersList.cookie || ''
+        },
+        body: JSON.stringify({ 
+          growth_plan_id: insertedPlan.id 
+        })
+      }).catch(err => console.error('Failed background day 1 generation', err))
+    } catch (e) {
+      console.error('Failed to dispatch background daily plan check', e);
+    }
+
+    return Response.json({ success: true, planId: insertedPlan.id })
+
+  } catch (err: any) {
     console.error('[generate-plan]', err)
     return Response.json(
       { error: err?.message ?? 'Internal server error' },

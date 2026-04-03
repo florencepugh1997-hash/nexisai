@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useNexisUser } from '@/contexts/nexis-user-context'
-import { supabase } from '@/lib/supabase'
+
 import { GlowButton } from '@/components/glow-button'
 import { cn } from '@/lib/utils'
 
@@ -54,9 +54,7 @@ export default function AnalyzingPage() {
     ;(async () => {
       setError(null)
 
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
+      const session = await import('next-auth/react').then(m => m.getSession())
       if (ac.signal.aborted) return
       if (!session?.user?.id) {
         router.replace('/signin')
@@ -65,39 +63,9 @@ export default function AnalyzingPage() {
 
       const userId = session.user.id
 
-      // Fetch business profile for this user
-      const { data: profile, error: profileError } = await supabase
-        .from('business_profiles')
-        .select(
-          'business_name, industry, description, current_stage, target_audience, biggest_challenge, current_channels, monthly_budget, revenue_goal',
-        )
-        .eq('user_id', userId)
-        .single()
-
-      if (ac.signal.aborted) return
-
-      if (profileError || !profile) {
-        setError(
-          profileError?.message ?? 'Could not load your business profile. Please try again.',
-        )
-        return
-      }
-
-      // Call the Claude API route
       const res = await fetch('/api/generate-plan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          business_name: profile.business_name,
-          industry: profile.industry,
-          description: profile.description,
-          current_stage: profile.current_stage,
-          target_audience: profile.target_audience,
-          biggest_challenge: profile.biggest_challenge,
-          current_channels: profile.current_channels,
-          monthly_budget: profile.monthly_budget,
-          revenue_goal: profile.revenue_goal,
-        }),
         signal: ac.signal,
       })
 
@@ -109,39 +77,6 @@ export default function AnalyzingPage() {
         setError(json?.error ?? `API error (${res.status}). Please try again.`)
         return
       }
-
-      const plan: string = json.plan
-
-      // Mark any existing plans as no longer current
-      await supabase
-        .from('growth_plans')
-        .update({ is_current: false })
-        .eq('user_id', userId)
-
-      // Save the new plan
-      const { data: insertedPlan, error: insertError } = await supabase
-        .from('growth_plans')
-        .insert({ user_id: userId, content: plan, is_current: true })
-        .select('id')
-        .single()
-
-      if (ac.signal.aborted) return
-
-      if (insertError || !insertedPlan) {
-        setError(insertError?.message || 'Failed to save growth plan')
-        return
-      }
-
-      // Fire and forget - don't await
-      fetch('/api/generate-daily-plan', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          user_id: userId, 
-          day_number: 1, 
-          growth_plan_id: insertedPlan.id 
-        })
-      }).catch(err => console.error('Failed background day 1 generation', err))
 
       router.push('/dashboard')
     })().catch((err) => {

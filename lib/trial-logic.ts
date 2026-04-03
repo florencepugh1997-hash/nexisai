@@ -1,5 +1,5 @@
 export function getTrialStatus(profile: {
-  trial_end_date?: string | null,
+  trial_end_date?: string | Date | null,
   is_trial_active?: boolean,
   is_subscribed: boolean
 } | null) {

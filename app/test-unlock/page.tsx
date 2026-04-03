@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase'
+
 
 export default function TestUnlockPage() {
   const [user, setUser] = useState<any>(null)
@@ -9,8 +9,10 @@ export default function TestUnlockPage() {
   const [response, setResponse] = useState<any>(null)
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      setUser(data?.user || null)
+    import('next-auth/react').then(m => {
+      m.getSession().then(session => {
+        setUser(session?.user || null)
+      })
     })
   }, [])
 

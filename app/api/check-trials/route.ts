@@ -1,14 +1,9 @@
-import { createClient } from '@supabase/supabase-js'
+import { prisma } from '@/lib/prisma'
 import { 
   sendTrialEndingSoonEmail, 
   sendLastDayReminderEmail, 
   sendTrialExpiredEmail 
 } from '@/lib/email'
-
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
 
 export async function GET(request: Request) {
   // Optional: Add a secret key check for security if needed
@@ -18,18 +13,24 @@ export async function GET(request: Request) {
   // }
 
   try {
-    const { data: profiles, error } = await supabaseAdmin
-      .from('profiles')
-      .select('id, full_name, email, trial_end_date')
-      .eq('is_subscribed', false)
-      .eq('is_trial_active', true)
-
-    if (error) throw error
+    const profiles = await prisma.profile.findMany({
+      where: {
+        is_subscribed: false,
+        is_trial_active: true
+      },
+      include: {
+        user: true
+      }
+    });
 
     const now = new Date()
     const results = []
 
     for (const profile of profiles) {
+      if (!profile.trial_end_date || !profile.user?.email || !profile.full_name) {
+         continue;
+      }
+
       const trialEnd = new Date(profile.trial_end_date)
       const diffTime = trialEnd.getTime() - now.getTime()
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
@@ -37,19 +38,19 @@ export async function GET(request: Request) {
       let emailSent = false
 
       if (diffDays === 2) {
-        await sendTrialEndingSoonEmail(profile.email, profile.full_name, 2)
+        await sendTrialEndingSoonEmail(profile.user.email, profile.full_name, 2)
         emailSent = true
       } else if (diffDays === 1) {
-        await sendLastDayReminderEmail(profile.email, profile.full_name)
+        await sendLastDayReminderEmail(profile.user.email, profile.full_name)
         emailSent = true
       } else if (diffDays <= 0) {
-        await sendTrialExpiredEmail(profile.email, profile.full_name)
+        await sendTrialExpiredEmail(profile.user.email, profile.full_name)
         
         // Mark trial as inactive
-        await supabaseAdmin
-          .from('profiles')
-          .update({ is_trial_active: false })
-          .eq('id', profile.id)
+        await prisma.profile.update({
+          where: { id: profile.id },
+          data: { is_trial_active: false }
+        });
           
         emailSent = true
       }

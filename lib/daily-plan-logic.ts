@@ -1,5 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
-
+import { prisma } from '@/lib/prisma';
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 
 function buildPrompt({
@@ -94,54 +93,40 @@ export async function generateDailyPlanLogic({ user_id, day_number, growth_plan_
     throw new Error('Missing required fields');
   }
 
-  // Bypass RLS using service role key
-  const supabaseAdmin = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
-
   // Fetch business profile
-  const { data: profile, error: profileError } = await supabaseAdmin
-    .from('business_profiles')
-    .select('*')
-    .eq('user_id', user_id)
-    .single();
+  const profile = await prisma.businessProfile.findUnique({
+    where: { userId: user_id }
+  });
 
   console.log(`Fetched business profile: ${profile ? 'yes' : 'no'}`);
 
-  if (profileError || !profile) {
+  if (!profile) {
     throw new Error('Business profile not found in database.');
   }
 
   // Fetch overview plan
-  let planQuery = supabaseAdmin
-    .from('growth_plans')
-    .select('*')
-    .eq('user_id', user_id);
-
+  let overviewPlan;
   if (growth_plan_id) {
-    planQuery = planQuery.eq('id', growth_plan_id);
+    overviewPlan = await prisma.growthPlan.findUnique({
+      where: { id: growth_plan_id }
+    });
   } else {
-    planQuery = planQuery.eq('is_current', true);
+    overviewPlan = await prisma.growthPlan.findFirst({
+      where: { userId: user_id, is_current: true }
+    });
   }
-
-  const { data: overviewPlan, error: overviewError } = await planQuery.single();
 
   console.log(`Fetched growth plan: ${overviewPlan ? 'yes' : 'no'}`);
 
-  if (overviewError || !overviewPlan) {
+  if (!overviewPlan) {
     throw new Error('Overview growth plan not found in database.');
   }
 
   let yesterday_submission = null;
   if (day_number > 1) {
-    const { data: sub } = await supabaseAdmin
-      .from('daily_submissions')
-      .select('*')
-      .eq('user_id', user_id)
-      .eq('day_number', day_number - 1)
-      .single();
-    yesterday_submission = sub;
+    yesterday_submission = await prisma.dailySubmission.findUnique({
+      where: { userId_day_number: { userId: user_id, day_number: day_number - 1 } }
+    });
   }
 
   const prompt = buildPrompt({
@@ -194,33 +179,33 @@ export async function generateDailyPlanLogic({ user_id, day_number, growth_plan_
   }
 
   // Check if user has active subscription to auto-unlock
-  const { data: userProfile } = await supabaseAdmin
-    .from('profiles')
-    .select('is_subscribed')
-    .eq('id', user_id)
-    .single();
+  const userProfile = await prisma.profile.findUnique({
+    where: { userId: user_id },
+    select: { is_subscribed: true }
+  });
 
   const isSubscribed = !!userProfile?.is_subscribed;
   const isUnlocked = day_number === 1 || isSubscribed;
 
   // Check if daily plan already exists to avoid duplicates
-  const { data: existingPlan } = await supabaseAdmin
-    .from('daily_plans')
-    .select('id')
-    .eq('user_id', user_id)
-    .eq('day_number', day_number)
-    .single();
+  const existingPlan = await prisma.dailyPlan.findUnique({
+    where: { userId_day_number: { userId: user_id, day_number } },
+    select: { id: true }
+  });
 
   if (existingPlan) {
     // Update existing
-    const { error: updateError } = await supabaseAdmin.from('daily_plans').update({
-      content: planContent,
-      is_unlocked: isUnlocked,
-      unlocked_at: isUnlocked ? new Date().toISOString() : null,
-      growth_plan_id
-    }).eq('id', existingPlan.id);
-
-    if (updateError) {
+    try {
+      await prisma.dailyPlan.update({
+        where: { id: existingPlan.id },
+        data: {
+          content: planContent,
+          is_unlocked: isUnlocked,
+          unlocked_at: isUnlocked ? new Date() : null,
+          growth_plan_id
+        }
+      });
+    } catch (updateError) {
       console.error('Update Error:', updateError);
       throw new Error('Failed to update daily plan in database.');
     }
@@ -229,24 +214,18 @@ export async function generateDailyPlanLogic({ user_id, day_number, growth_plan_
     let final_growth_plan_id = growth_plan_id;
 
     if (!final_growth_plan_id && day_number > 1) {
-      const { data: currentDayPlan } = await supabaseAdmin
-        .from('daily_plans')
-        .select('growth_plan_id')
-        .eq('user_id', user_id)
-        .eq('day_number', day_number - 1)
-        .maybeSingle();
-
-      final_growth_plan_id = currentDayPlan?.growth_plan_id;
+      const currentDayPlan = await prisma.dailyPlan.findUnique({
+        where: { userId_day_number: { userId: user_id, day_number: day_number - 1 } },
+        select: { growth_plan_id: true }
+      });
+      final_growth_plan_id = currentDayPlan?.growth_plan_id || undefined;
     }
 
     if (!final_growth_plan_id) {
-      const { data: growthPlan } = await supabaseAdmin
-        .from('growth_plans')
-        .select('id')
-        .eq('user_id', user_id)
-        .eq('is_current', true)
-        .maybeSingle();
-
+      const growthPlan = await prisma.growthPlan.findFirst({
+        where: { userId: user_id, is_current: true },
+        select: { id: true }
+      });
       final_growth_plan_id = growthPlan?.id;
     }
 
@@ -255,12 +234,12 @@ export async function generateDailyPlanLogic({ user_id, day_number, growth_plan_
     }
 
     const payload: any = {
-      user_id,
+      userId: user_id,
       day_number,
       growth_plan_id: final_growth_plan_id,
       content: planContent,
       is_unlocked: isUnlocked,
-      unlocked_at: isUnlocked ? new Date().toISOString() : null
+      unlocked_at: isUnlocked ? new Date() : null
     };
 
     console.log('Attempting to insert:', JSON.stringify({
@@ -271,13 +250,10 @@ export async function generateDailyPlanLogic({ user_id, day_number, growth_plan_
       is_unlocked: isUnlocked
     }));
 
-    const { error: insertError } = await supabaseAdmin.from('daily_plans').insert(payload);
-
-    if (insertError) {
+    try {
+      await prisma.dailyPlan.create({ data: payload });
+    } catch (insertError: any) {
       console.log('Insert error details:', JSON.stringify(insertError))
-      console.log('Insert error code:', insertError.code)
-      console.log('Insert error message:', insertError.message)
-      console.log('Insert error hint:', insertError.hint)
       throw new Error('Failed to insert daily plan into database: ' + insertError.message);
     }
   }
@@ -292,20 +268,11 @@ export async function unlockNextDayLogic({ user_id, current_day_number, force = 
     throw new Error('Missing user_id or current_day_number');
   }
 
-  const supabaseAdmin = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
+  const currentPlan = await prisma.dailyPlan.findUnique({
+    where: { userId_day_number: { userId: user_id, day_number: current_day_number } }
+  });
 
-  // Get current day's plan
-  const { data: currentPlan, error: currentPlanError } = await supabaseAdmin
-    .from('daily_plans')
-    .select('*')
-    .eq('user_id', user_id)
-    .eq('day_number', current_day_number)
-    .single();
-
-  if (currentPlanError || !currentPlan) {
+  if (!currentPlan) {
     throw new Error('Current day plan not found');
   }
 
@@ -315,7 +282,7 @@ export async function unlockNextDayLogic({ user_id, current_day_number, force = 
 
   let canUnlock = force;
 
-  if (!canUnlock) {
+  if (!canUnlock && currentPlan.first_opened_at) {
     const openedAt = new Date(currentPlan.first_opened_at).getTime();
     const unlockTime = openedAt + (16 * 60 * 60 * 1000);
     const now = Date.now();
@@ -334,12 +301,9 @@ export async function unlockNextDayLogic({ user_id, current_day_number, force = 
   }
 
   // Check if next day exists
-  const { data: nextPlan } = await supabaseAdmin
-    .from('daily_plans')
-    .select('*')
-    .eq('user_id', user_id)
-    .eq('day_number', nextDay)
-    .single();
+  const nextPlan = await prisma.dailyPlan.findUnique({
+    where: { userId_day_number: { userId: user_id, day_number: nextDay } }
+  });
 
   if (!nextPlan) {
     // Trigger generation
@@ -354,13 +318,13 @@ export async function unlockNextDayLogic({ user_id, current_day_number, force = 
     }
   } else if (!nextPlan.is_unlocked) {
     // Just unlock it
-    await supabaseAdmin
-      .from('daily_plans')
-      .update({
+    await prisma.dailyPlan.update({
+      where: { id: nextPlan.id },
+      data: {
         is_unlocked: true,
-        unlocked_at: new Date().toISOString()
-      })
-      .eq('id', nextPlan.id);
+        unlocked_at: new Date()
+      }
+    });
   }
 
   return { unlocked: true };
@@ -374,25 +338,24 @@ export async function generateDailyPlanStream({ user_id, day_number, growth_plan
     throw new Error('Missing required fields');
   }
 
-  const supabaseAdmin = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
-
-  const { data: profile } = await supabaseAdmin.from('business_profiles').select('*').eq('user_id', user_id).single();
+  const profile = await prisma.businessProfile.findUnique({
+    where: { userId: user_id }
+  });
   if (!profile) throw new Error('Business profile not found in database.');
 
-  let planQuery = supabaseAdmin.from('growth_plans').select('*').eq('user_id', user_id);
-  if (growth_plan_id) planQuery = planQuery.eq('id', growth_plan_id);
-  else planQuery = planQuery.eq('is_current', true);
-
-  const { data: overviewPlan } = await planQuery.single();
+  let overviewPlan;
+  if (growth_plan_id) {
+    overviewPlan = await prisma.growthPlan.findUnique({ where: { id: growth_plan_id } });
+  } else {
+    overviewPlan = await prisma.growthPlan.findFirst({ where: { userId: user_id, is_current: true } });
+  }
   if (!overviewPlan) throw new Error('Overview growth plan not found in database.');
 
   let yesterday_submission = null;
   if (day_number > 1) {
-    const { data: sub } = await supabaseAdmin.from('daily_submissions').select('*').eq('user_id', user_id).eq('day_number', day_number - 1).single();
-    yesterday_submission = sub;
+    yesterday_submission = await prisma.dailySubmission.findUnique({
+      where: { userId_day_number: { userId: user_id, day_number: day_number - 1 } }
+    });
   }
 
   const prompt = buildPrompt({
@@ -477,35 +440,52 @@ export async function generateDailyPlanStream({ user_id, day_number, growth_plan
         controller.close();
 
         // Save string to database natively!
-        const { data: userProfile } = await supabaseAdmin.from('profiles').select('is_subscribed').eq('id', user_id).single();
+        const userProfile = await prisma.profile.findUnique({
+          where: { userId: user_id },
+          select: { is_subscribed: true }
+        });
         const isUnlocked = day_number === 1 || !!userProfile?.is_subscribed;
 
-        const { data: existingPlan } = await supabaseAdmin.from('daily_plans').select('id').eq('user_id', user_id).eq('day_number', day_number).single();
+        const existingPlan = await prisma.dailyPlan.findUnique({
+          where: { userId_day_number: { userId: user_id, day_number } },
+          select: { id: true }
+        });
 
         if (existingPlan) {
-          await supabaseAdmin.from('daily_plans').update({
-            content: fullPlanContent,
-            is_unlocked: isUnlocked,
-            unlocked_at: isUnlocked ? new Date().toISOString() : null,
-            growth_plan_id
-          }).eq('id', existingPlan.id);
+          await prisma.dailyPlan.update({
+            where: { id: existingPlan.id },
+            data: {
+              content: fullPlanContent,
+              is_unlocked: isUnlocked,
+              unlocked_at: isUnlocked ? new Date() : null,
+              growth_plan_id
+            }
+          });
         } else {
           let final_growth_plan_id = growth_plan_id;
           if (!final_growth_plan_id && day_number > 1) {
-            const { data: currentDayPlan } = await supabaseAdmin.from('daily_plans').select('growth_plan_id').eq('user_id', user_id).eq('day_number', day_number - 1).maybeSingle();
-            final_growth_plan_id = currentDayPlan?.growth_plan_id;
+            const currentDayPlan = await prisma.dailyPlan.findUnique({
+              where: { userId_day_number: { userId: user_id, day_number: day_number - 1 } },
+              select: { growth_plan_id: true }
+            });
+            final_growth_plan_id = currentDayPlan?.growth_plan_id || undefined;
           }
           if (!final_growth_plan_id) {
-            const { data: growthPlan } = await supabaseAdmin.from('growth_plans').select('id').eq('user_id', user_id).eq('is_current', true).maybeSingle();
+            const growthPlan = await prisma.growthPlan.findFirst({
+              where: { userId: user_id, is_current: true },
+              select: { id: true }
+            });
             final_growth_plan_id = growthPlan?.id;
           }
-          await supabaseAdmin.from('daily_plans').insert({
-            user_id,
-            day_number,
-            growth_plan_id: final_growth_plan_id,
-            content: fullPlanContent,
-            is_unlocked: isUnlocked,
-            unlocked_at: isUnlocked ? new Date().toISOString() : null
+          await prisma.dailyPlan.create({
+            data: {
+              userId: user_id,
+              day_number,
+              growth_plan_id: final_growth_plan_id as string,
+              content: fullPlanContent,
+              is_unlocked: isUnlocked,
+              unlocked_at: isUnlocked ? new Date() : null
+            }
           });
         }
       } catch (err) {

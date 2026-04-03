@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Check, Lock, Unlock, Loader2, AlertCircle } from 'lucide-react'
 import { useNexisUser } from '@/contexts/nexis-user-context'
-import { supabase } from '@/lib/supabase'
+import { useSession } from 'next-auth/react'
+import { getJourneyAndDashboardData } from '@/app/actions/plans'
 import { cn } from '@/lib/utils'
 import { getTrialStatus } from '@/lib/trial-logic'
 import { GlowButton } from '@/components/glow-button'
@@ -24,23 +25,28 @@ export default function JourneyPage() {
     return () => clearInterval(timer)
   }, [])
 
+  const { data: session, status } = useSession()
+
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user: authUser } }) => {
-      if (!authUser) {
-        router.push('/signin')
+    let cancelled = false;
+
+    if (status === 'loading') return;
+    if (!session?.user?.id) {
+      router.push('/signin')
+      return
+    }
+
+    const fetchData = async () => {
+      const result = await getJourneyAndDashboardData()
+      if (cancelled) return
+      
+      if (result.error || !result.data) {
         return
       }
-      
-      const fetchData = async () => {
-        const [plansRes, subsRes, profileRes] = await Promise.all([
-          supabase.from('daily_plans').select('*').eq('user_id', authUser.id),
-          supabase.from('daily_submissions').select('day_number').eq('user_id', authUser.id),
-          supabase.from('profiles').select('trial_end_date, is_trial_active, is_subscribed').eq('id', authUser.id).maybeSingle()
-        ]);
 
-        let plansData = plansRes.data || []
-        const subsData = subsRes.data || []
-        const tStatus = getTrialStatus(profileRes.data)
+      let plansData = result.data.dailyPlans || []
+      const subsData = result.data.submissions || []
+      const tStatus = getTrialStatus(result.data.profile)
         
         let unlockedAny = false;
         
@@ -66,7 +72,7 @@ export default function JourneyPage() {
                 const res = await fetch('/api/unlock-next-day', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ user_id: authUser.id, current_day_number: plan.day_number })
+                  body: JSON.stringify({ current_day_number: plan.day_number })
                 });
                 if (res.ok) {
                   const data = await res.json();
@@ -77,24 +83,30 @@ export default function JourneyPage() {
               }
             }
             
+            if (cancelled) return
             setUnlockingDays(new Set());
           }
 
           if (unlockedAny) {
-             const { data: updatedPlans } = await supabase.from('daily_plans').select('*').eq('user_id', authUser.id);
-             if (updatedPlans) plansData = updatedPlans;
+             const refetched = await getJourneyAndDashboardData()
+             if (refetched.data?.dailyPlans) {
+               plansData = refetched.data.dailyPlans
+             }
           }
         }
 
+      if (!cancelled) {
         setPlans(plansData)
         setSubmissions(subsData)
         setTrialStatus(tStatus)
         setLoading(false)
       }
+    }
 
-      fetchData();
-    })
-  }, [router])
+    fetchData();
+
+    return () => { cancelled = true }
+  }, [router, session, status])
 
   const days = Array.from({ length: 90 }, (_, i) => i + 1)
 

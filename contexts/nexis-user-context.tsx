@@ -15,7 +15,8 @@ import {
   trialDaysLeft,
   writeNexisUser,
 } from '@/lib/nexis-storage'
-import { supabase } from '@/lib/supabase'
+import { useSession, signOut as nextAuthSignOut } from 'next-auth/react'
+import { getUserProfileData } from '@/app/actions/user'
 
 type NexisUserContextValue = {
   user: NexisUser | null
@@ -33,6 +34,7 @@ const NexisUserContext = createContext<NexisUserContextValue | null>(null)
 export function NexisUserProvider({ children }: { children: React.ReactNode }) {
   const [user, setUserState] = useState<NexisUser | null>(null)
   const [hydrated, setHydrated] = useState(false)
+  const { data: session, status } = useSession()
 
   useEffect(() => {
     setUserState(readNexisUser())
@@ -40,14 +42,9 @@ export function NexisUserProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const refreshUser = useCallback(async () => {
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session?.user) return
+    if (!session?.user?.id) return
 
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('full_name, avatar_url')
-      .eq('id', session.user.id)
-      .maybeSingle()
+    const profile = await getUserProfileData()
 
     if (profile) {
       setUserState(prev => {
@@ -62,7 +59,7 @@ export function NexisUserProvider({ children }: { children: React.ReactNode }) {
         return next
       })
     }
-  }, [])
+  }, [session])
 
   useEffect(() => {
     if (hydrated) {
@@ -100,7 +97,7 @@ export function NexisUserProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = useCallback(async () => {
     try {
-      await supabase.auth.signOut()
+      await nextAuthSignOut({ redirect: false })
     } finally {
       clearNexisUser()
       setUserState(null)

@@ -8,7 +8,8 @@ import { GlowInput } from '@/components/glow-input'
 import { BackArrow } from '@/components/app/back-arrow'
 import { useNexisUser } from '@/contexts/nexis-user-context'
 import { Card } from '@/components/ui/card'
-import { supabase } from '@/lib/supabase'
+import { signIn } from 'next-auth/react'
+import { getUserProfileData } from '@/app/actions/user'
 
 export default function SignInPage() {
   const router = useRouter()
@@ -32,36 +33,29 @@ export default function SignInPage() {
     if (!validate()) return
     setLoading(true)
 
-    const { data, error } = await supabase.auth.signInWithPassword({
+    const response = await signIn('credentials', {
       email: form.email.trim(),
       password: form.password,
+      redirect: false,
     })
 
-    if (error || !data.user) {
+    if (response?.error) {
       setFormError('Invalid email or password')
       setLoading(false)
       return
     }
 
-    const userId = data.user.id
-    const email = data.user.email ?? form.email.trim()
+    const email = form.email.trim()
+    const profile = await getUserProfileData()
 
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select(
-        'full_name, trial_start_date, trial_end_date, is_trial_active',
-      )
-      .eq('id', userId)
-      .maybeSingle()
-
-    const metaName =
-      (data.user.user_metadata?.full_name as string | undefined) ?? profile?.full_name
+    const metaName = profile?.full_name
 
     saveUser({
       fullName: metaName ?? email.split('@')[0] ?? 'User',
       email,
       trialStartedAt:
-        profile?.trial_start_date ??
+        profile?.trial_start_date?.toISOString?.() ??
+        (profile?.trial_start_date as unknown as string) ??
         new Date().toISOString(),
     })
 

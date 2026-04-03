@@ -10,7 +10,8 @@ import { GlowButton } from '@/components/glow-button'
 import { GlowInput } from '@/components/glow-input'
 import { useState, useEffect, useRef } from 'react'
 import { BackArrow } from '@/components/app/back-arrow'
-import { supabase } from '@/lib/supabase'
+import { useSession } from 'next-auth/react'
+import { getUserProfileData, getBusinessProfileData, updateProfileData } from '@/app/actions/user'
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
 export default function ProfilePage() {
@@ -31,24 +32,24 @@ export default function ProfilePage() {
   useEffect(() => {
     let cancelled = false
     ;(async () => {
-      const { data: { session } } = await supabase.auth.getSession()
+      const session = await import('next-auth/react').then(m => m.getSession())
       if (cancelled) return
       if (!session?.user?.id) return router.push('/signin')
       setAuthUserId(session.user.id)
       setFullName(user?.fullName || '')
 
       const [profileRes, bizRes] = await Promise.all([
-        supabase.from('profiles').select('avatar_url, full_name').eq('id', session.user.id).maybeSingle(),
-        supabase.from('business_profiles').select('business_name').eq('user_id', session.user.id).maybeSingle()
+        getUserProfileData(),
+        getBusinessProfileData()
       ])
 
       if (!cancelled) {
-        if (profileRes.data) {
-          if (profileRes.data.avatar_url) setAvatarUrl(profileRes.data.avatar_url)
-          if (profileRes.data.full_name) setFullName(profileRes.data.full_name)
+        if (profileRes) {
+          if (profileRes.avatar_url) setAvatarUrl(profileRes.avatar_url)
+          if (profileRes.full_name) setFullName(profileRes.full_name)
         }
-        if (bizRes.data) {
-          setBusinessName(bizRes.data.business_name || '')
+        if (bizRes) {
+          setBusinessName(bizRes.business_name || '')
         }
       }
     })()
@@ -62,15 +63,19 @@ export default function ProfilePage() {
       if (!e.target.files || e.target.files.length === 0) return
       
       const file = e.target.files[0]
-      const filePath = `${authUserId}/${Date.now()}-${file.name}`
+      const formData = new FormData()
+      formData.append('file', file)
       
-      const { error: uploadError } = await supabase.storage.from('avatars').upload(filePath, file)
-      if (uploadError) throw uploadError
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData
+      })
       
-      const { data } = supabase.storage.from('avatars').getPublicUrl(filePath)
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
       
-      await supabase.from('profiles').update({ avatar_url: data.publicUrl }).eq('id', authUserId)
-      setAvatarUrl(data.publicUrl)
+      await updateProfileData({ avatar_url: data.url })
+      setAvatarUrl(data.url)
       await refreshUser()
     } catch (err: any) {
       alert('Error uploading avatar: ' + err.message)
@@ -85,8 +90,8 @@ export default function ProfilePage() {
     if (!authUserId || fullName === user?.fullName) return
     setSavingProfile(true)
     try {
-      const { error } = await supabase.from('profiles').update({ full_name: fullName }).eq('id', authUserId)
-      if (error) throw error
+      const { error } = await updateProfileData({ full_name: fullName })
+      if (error) throw new Error(error)
       saveUser({ ...user!, fullName, email: user?.email || '' })
       await refreshUser()
       setProfileMessage('Changes saved successfully')

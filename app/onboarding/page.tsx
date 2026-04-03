@@ -8,7 +8,8 @@ import { BackArrow } from '@/components/app/back-arrow'
 import { Textarea } from '@/components/ui/textarea'
 import { useNexisUser } from '@/contexts/nexis-user-context'
 import type { GrowthStage } from '@/lib/nexis-storage'
-import { supabase } from '@/lib/supabase'
+import { createBusinessProfile } from '@/app/actions/user'
+import { useSession } from 'next-auth/react'
 import { cn } from '@/lib/utils'
 import { ArrowLeft } from 'lucide-react'
 
@@ -53,6 +54,7 @@ function stageLabel(stage: GrowthStage): string {
 export default function OnboardingPage() {
   const router = useRouter()
   const { user, hydrated, updateUser, saveUser } = useNexisUser()
+  const { data: session, status } = useSession()
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
@@ -69,38 +71,19 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     if (!hydrated) return
-    let cancelled = false
-    ;(async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-      if (cancelled) return
-      if (!session) {
-        router.replace('/signin')
-        return
-      }
-      if (!user?.email) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('full_name, trial_start_date')
-          .eq('id', session.user.id)
-          .maybeSingle()
-        if (cancelled) return
-        saveUser({
-          fullName:
-            profile?.full_name ??
-            (session.user.user_metadata?.full_name as string | undefined) ??
-            'User',
-          email: session.user.email ?? '',
-          trialStartedAt:
-            profile?.trial_start_date ?? new Date().toISOString(),
-        })
-      }
-    })()
-    return () => {
-      cancelled = true
+    if (status === 'loading') return
+    if (!session) {
+      router.replace('/signin')
+      return
     }
-  }, [hydrated, user?.email, router, saveUser])
+    if (!user?.email) {
+      saveUser({
+        fullName: session.user.name || 'User',
+        email: session.user.email ?? '',
+        trialStartedAt: new Date().toISOString(),
+      })
+    }
+  }, [hydrated, session, status, user?.email, router, saveUser])
 
   const toggleChannel = (c: string) => {
     if (c === 'None') {
@@ -145,19 +128,13 @@ export default function OnboardingPage() {
 
     setLoading(true)
 
-    const {
-      data: { user: authUser },
-      error: authError,
-    } = await supabase.auth.getUser()
-
-    if (authError || !authUser) {
-      setSubmitError(authError?.message ?? 'You must be signed in to continue.')
+    if (!session?.user) {
+      setSubmitError('You must be signed in to continue.')
       setLoading(false)
       return
     }
 
-    const { error: insertError } = await supabase.from('business_profiles').insert({
-      user_id: authUser.id,
+    const result = await createBusinessProfile({
       business_name: businessName.trim(),
       industry,
       description: businessDescription.trim(),
@@ -169,8 +146,8 @@ export default function OnboardingPage() {
       revenue_goal: revenueGoal.trim(),
     })
 
-    if (insertError) {
-      setSubmitError(insertError.message)
+    if (result.error) {
+      setSubmitError(result.error)
       setLoading(false)
       return
     }

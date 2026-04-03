@@ -1,13 +1,7 @@
-import { createClient } from '@supabase/supabase-js'
 import { sendPaymentConfirmationEmail } from '@/lib/email'
+import { prisma } from '@/lib/prisma'
 
 const PAYSTACK_VERIFY_URL = 'https://api.paystack.co/transaction/verify'
-
-// Server-side Supabase client with service-role access for writing subscription data
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-)
 
 export async function POST(request: Request) {
   try {
@@ -65,47 +59,49 @@ export async function POST(request: Request) {
     thirtyDaysLater.setDate(thirtyDaysLater.getDate() + 30)
 
     // Update the profiles table
-    const { data: updatedData, error: updateError } = await supabaseAdmin
-      .from('profiles')
-      .update({
-        is_subscribed: true,
-        is_trial_active: false,
-        trial_start_date: now.toISOString(),
-        trial_end_date: thirtyDaysLater.toISOString(),
+    let updatedProfile;
+    try {
+      updatedProfile = await prisma.profile.update({
+        where: { userId },
+        data: {
+          is_subscribed: true,
+          is_trial_active: false,
+          trial_start_date: now,
+          trial_end_date: thirtyDaysLater,
+        },
+        include: { user: true }
       })
-      .eq('id', userId)
-      .select()
-
-    if (updateError) {
-      console.error('[verify-payment] Supabase update error:', updateError)
+    } catch (updateError: any) {
+      console.error('[verify-payment] Prisma update error:', updateError)
       return Response.json({ error: updateError.message }, { status: 500 })
     }
 
     // Unlock all 90 daily plans for the user
-    const { error: unlockError } = await supabaseAdmin
-      .from('daily_plans')
-      .update({
-        is_unlocked: true,
-        unlocked_at: now.toISOString(),
-      })
-      .eq('user_id', userId)
-
-    if (unlockError) {
+    try {
+      await prisma.dailyPlan.updateMany({
+        where: { userId },
+        data: {
+          is_unlocked: true,
+          unlocked_at: now,
+        }
+      });
+    } catch (unlockError) {
       console.error('[verify-payment] Daily plans unlock error:', unlockError)
     }
 
-    if (!updatedData || updatedData.length === 0) {
+    if (!updatedProfile) {
       return Response.json(
         { error: 'User profile not found. Subscription flag could not be set.' },
         { status: 404 },
       )
     }
 
-    const user = updatedData[0]
     // Trigger payment confirmation email (non-blocking)
-    sendPaymentConfirmationEmail(user.email, user.full_name).catch(err => 
-      console.error('[verify-payment] Failed to send confirmation email:', err)
-    )
+    if (updatedProfile.user?.email && updatedProfile.full_name) {
+      sendPaymentConfirmationEmail(updatedProfile.user.email, updatedProfile.full_name).catch(err => 
+        console.error('[verify-payment] Failed to send confirmation email:', err)
+      )
+    }
 
     return Response.json({ success: true })
   } catch (err: unknown) {

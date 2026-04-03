@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import ReactMarkdown from 'react-markdown'
 import { Lock } from 'lucide-react'
 import { useNexisUser } from '@/contexts/nexis-user-context'
-import { supabase } from '@/lib/supabase'
+
 import { GlowButton } from '@/components/glow-button'
 import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
@@ -160,9 +160,7 @@ function PlanPageContent() {
   useEffect(() => {
     let cancelled = false
     ;(async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
+      const session = await import('next-auth/react').then(m => m.getSession())
       if (cancelled) {
         setPlanLoading(false)
         return
@@ -173,31 +171,21 @@ function PlanPageContent() {
         return
       }
 
-      const userId = session.user.id
-
-      const [planResult, profileResult] = await Promise.all([
-        supabase
-          .from('growth_plans')
-          .select('content')
-          .eq('user_id', userId)
-          .eq('is_current', true)
-          .maybeSingle(),
-        supabase
-          .from('profiles')
-          .select('trial_end_date, is_trial_active, is_subscribed')
-          .eq('id', userId)
-          .maybeSingle(),
-      ])
+      const { getPlanPageData } = await import('@/app/actions/plans')
+      const result = await getPlanPageData()
 
       if (!cancelled) {
-        const status = getTrialStatus(profileResult.data)
-        setRawPlan(planResult.data?.content ?? null)
-        setTrialStatus(status)
+        if (result.success && result.data) {
+           const { planContent, profile: profileResult } = result.data
+           const status = getTrialStatus(profileResult)
+           setRawPlan(planContent ?? null)
+           setTrialStatus(status)
+        }
         setPlanLoading(false)
       }
     })()
     return () => { cancelled = true }
-  }, [])
+  }, [router])
 
   const sections = useMemo(
     () => (rawPlan ? parsePlanIntoSections(rawPlan) : null),

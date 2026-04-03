@@ -8,7 +8,8 @@ import { GlowInput } from '@/components/glow-input'
 import { BackArrow } from '@/components/app/back-arrow'
 import { useNexisUser } from '@/contexts/nexis-user-context'
 import { Card } from '@/components/ui/card'
-import { supabase } from '@/lib/supabase'
+import { signUpUser } from '@/app/actions/auth'
+import { signIn } from 'next-auth/react'
 
 export default function SignUpPage() {
   const router = useRouter()
@@ -40,48 +41,25 @@ export default function SignUpPage() {
     setFormError(null)
     if (!validate()) return
     setLoading(true)
-
-    const trialStart = new Date()
-    const trialEnd = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
-
-    const { data: authData, error: signUpError } = await supabase.auth.signUp({
+    const response = await signUpUser({
       email: form.email.trim(),
       password: form.password,
-      options: {
-        data: { full_name: form.fullName.trim() },
-      },
+      fullName: form.fullName.trim()
     })
 
-    if (signUpError) {
-      setFormError(signUpError.message)
+    if (response.error) {
+      setFormError(response.error)
       setLoading(false)
       return
     }
 
-    const newUser = authData.user
-    if (!newUser?.id) {
-      setFormError(
-        'Could not complete signup. If email confirmation is required, try signing in after confirming your email.',
-      )
-      setLoading(false)
-      return
-    }
-
-    const { error: profileError } = await supabase.from('profiles').insert({
-      id: newUser.id,
-      full_name: form.fullName.trim(),
-      trial_start_date: trialStart.toISOString(),
-      trial_end_date: trialEnd.toISOString(),
-      is_trial_active: true,
-      is_subscribed: false,
+    await signIn('credentials', {
+      email: form.email.trim(),
+      password: form.password,
+      redirect: false,
     })
 
-    if (profileError) {
-      setFormError(profileError.message)
-      setLoading(false)
-      return
-    }
-
+    const trialStart = new Date()
     saveUser({
       fullName: form.fullName.trim(),
       email: form.email.trim(),

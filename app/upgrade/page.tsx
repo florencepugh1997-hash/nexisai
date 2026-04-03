@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { GlowButton } from '@/components/glow-button'
 import { cn } from '@/lib/utils'
 import { Check } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+
 
 const features = [
   'Full 90-day growth roadmap unlocked',
@@ -34,9 +34,7 @@ export default function UpgradePage() {
 
     try {
       // Get current user session
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
+      const session = await import('next-auth/react').then(m => m.getSession())
 
       if (!session?.user) {
         router.push('/signin')

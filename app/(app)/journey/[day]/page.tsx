@@ -4,8 +4,8 @@ import { use, useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Check, ChevronLeft, Loader2, Lock, Star } from 'lucide-react'
 import Link from 'next/link'
-import { useNexisUser } from '@/contexts/nexis-user-context'
-import { supabase } from '@/lib/supabase'
+import { useSession } from 'next-auth/react'
+import { getDayPlanData, updatePlanFirstOpened, unlockDayPlan } from '@/app/actions/plans'
 import { GlowButton } from '@/components/glow-button'
 import { Card } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
@@ -61,24 +61,27 @@ export default function DailyPlanPage({ params }: { params: Promise<{ day: strin
     isPollingRef.current = false
     hasTriggeredGenerationRef.current = false
 
-    supabase.auth.getUser().then(async ({ data: { user: authUser } }) => {
-      if (!authUser) {
-        router.push('/signin')
-        return
+    ;(async () => {
+      const session = await import('next-auth/react').then(m => m.getSession())
+
+      if (!session?.user?.id) {
+      router.push('/signin')
+      return
+    }
+
+    try {
+      const result = await getDayPlanData(dayNumber)
+      if (result.error || !result.data) {
+         setError(result.error || 'Failed to load daily plan')
+         setLoading(false)
+         return
       }
 
-      try {
-        const [planRes, profileRes] = await Promise.all([
-          supabase.from('daily_plans').select('*').eq('user_id', authUser.id).eq('day_number', dayNumber).maybeSingle(),
-          supabase.from('profiles').select('trial_end_date, is_trial_active, is_subscribed').eq('id', authUser.id).maybeSingle()
-        ])
+      const { plan: planData, profile: profileData, submission: subData, growthPlan } = result.data
+      const tStatus = getTrialStatus(profileData)
+      setTrialStatus(tStatus)
 
-        const planData = planRes.data
-        const planError = planRes.error
-        const tStatus = getTrialStatus(profileRes.data)
-        setTrialStatus(tStatus)
-
-        if (planError || !planData) {
+      if (!planData) {
           if (tStatus.isExpired && !tStatus.isSubscribed) {
             setError('Your free trial has ended. Subscribe to unlock this day.')
             setLoading(false)
@@ -88,13 +91,6 @@ export default function DailyPlanPage({ params }: { params: Promise<{ day: strin
           if (dayNumber === 1) {
             setIsGeneratingDay1(true)
             setPollingStartTime(Date.now())
-
-            const { data: growthPlan } = await supabase
-              .from('growth_plans')
-              .select('id')
-              .eq('user_id', authUser.id)
-              .eq('is_current', true)
-              .maybeSingle()
 
             if (!growthPlan) {
               setLoading(false)
@@ -113,8 +109,6 @@ export default function DailyPlanPage({ params }: { params: Promise<{ day: strin
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                      user_id: authUser.id,
-                      day_number: 1,
                       growth_plan_id: growthPlan.id
                     })
                   });
@@ -191,17 +185,16 @@ export default function DailyPlanPage({ params }: { params: Promise<{ day: strin
 
         if (!currentPlan.is_unlocked && dayNumber === 1) {
           currentPlan.is_unlocked = true
-          await supabase.from('daily_plans').update({ is_unlocked: true }).eq('id', currentPlan.id)
+          await unlockDayPlan(currentPlan.id)
         }
 
         if (!currentPlan.first_opened_at) {
-          const nowStr = new Date().toISOString()
-          await supabase
-            .from('daily_plans')
-            .update({ first_opened_at: nowStr })
-            .eq('id', currentPlan.id)
-
-          currentPlan.first_opened_at = nowStr
+          const updateRes = await updatePlanFirstOpened(currentPlan.id)
+          if (updateRes.success) {
+            currentPlan.first_opened_at = updateRes.first_opened_at as any
+          } else {
+            currentPlan.first_opened_at = new Date() as any
+          }
         } else {
           const openedAt = new Date(currentPlan.first_opened_at).getTime()
           const now = Date.now()
@@ -209,26 +202,20 @@ export default function DailyPlanPage({ params }: { params: Promise<{ day: strin
             fetch('/api/unlock-next-day', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ user_id: authUser.id, current_day_number: dayNumber })
+              body: JSON.stringify({ current_day_number: dayNumber })
             }).catch(console.error)
           }
         }
 
         setPlan(currentPlan)
 
-        const { data: subData } = await supabase
-          .from('daily_submissions')
-          .select('*')
-          .eq('user_id', authUser.id)
-          .eq('day_number', dayNumber)
-          .maybeSingle()
-
         if (subData) {
           setSubmission(subData)
           setIsFormUnlocked(true)
         } else {
-          updateTimer(currentPlan.first_opened_at)
-          const timerInterval = setInterval(() => updateTimer(currentPlan.first_opened_at), 1000)
+          const openedAtStr = currentPlan.first_opened_at?.toISOString?.() ?? (currentPlan.first_opened_at as any as string) ?? new Date().toISOString()
+          updateTimer(openedAtStr)
+          const timerInterval = setInterval(() => updateTimer(openedAtStr), 1000)
           setLoading(false)
           return () => clearInterval(timerInterval)
         }
@@ -239,7 +226,7 @@ export default function DailyPlanPage({ params }: { params: Promise<{ day: strin
       } finally {
         setLoading(false)
       }
-    })
+    })()
   }, [dayNumber, router])
 
   // Countdown effect for nextUnlockAt
@@ -290,23 +277,14 @@ export default function DailyPlanPage({ params }: { params: Promise<{ day: strin
     setPollingStartTime(now)
       ; (window as any)._pollingStart = now
 
-    const { data: { user: authUser } } = await supabase.auth.getUser()
-    if (!authUser) return
-
-    const { data: growthPlan } = await supabase
-      .from('growth_plans')
-      .select('id')
-      .eq('user_id', authUser.id)
-      .eq('is_current', true)
-      .maybeSingle()
+    const result = await getDayPlanData(1)
+    const growthPlan = result.data?.growthPlan
 
     if (growthPlan) {
       fetch('/api/generate-daily-plan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          user_id: authUser.id,
-          day_number: 1,
           growth_plan_id: growthPlan.id
         })
       }).catch(console.error)
@@ -315,17 +293,11 @@ export default function DailyPlanPage({ params }: { params: Promise<{ day: strin
 
   const handleNextDay = async () => {
     setIsUnlocking(true)
-    const { data: { user: authUser } } = await supabase.auth.getUser()
-    if (!authUser) {
-      setIsUnlocking(false)
-      return
-    }
-
     try {
       const res = await fetch('/api/unlock-next-day', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: authUser.id, current_day_number: dayNumber })
+        body: JSON.stringify({ current_day_number: dayNumber })
       })
       const data = await res.json()
 
@@ -349,15 +321,11 @@ export default function DailyPlanPage({ params }: { params: Promise<{ day: strin
     setIsSubmitting(true)
     setSubmitError(null)
 
-    const { data: { user: authUser } } = await supabase.auth.getUser()
-    if (!authUser) return
-
     try {
       const res = await fetch('/api/submit-daily-form', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          user_id: authUser.id,
           day_number: dayNumber,
           ...formData
         })

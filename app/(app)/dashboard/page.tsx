@@ -7,7 +7,8 @@ import { GlowButton } from '@/components/glow-button'
 import { Card } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Progress } from '@/components/ui/progress'
-import { supabase } from '@/lib/supabase'
+import { useSession } from 'next-auth/react'
+import { getJourneyAndDashboardData } from '@/app/actions/plans'
 import { cn } from '@/lib/utils'
 import { getTrialStatus } from '@/lib/trial-logic'
 
@@ -24,33 +25,26 @@ export default function DashboardPage() {
 
   useEffect(() => {
     let cancelled = false
-    
     ;(async () => {
-      const { data: { session } } = await supabase.auth.getSession()
+      const result = await getJourneyAndDashboardData()
       if (cancelled) return
-      if (!session?.user?.id) {
+      if (result.error || !result.data) {
         router.push('/signin')
         return
       }
-      
-      const userId = session.user.id
-      
-      // Fetch all required data
-      const [plansRes, subsRes, profileRes] = await Promise.all([
-        supabase.from('daily_plans').select('*').eq('user_id', userId).order('day_number', { ascending: true }),
-        supabase.from('daily_submissions').select('*').eq('user_id', userId),
-        supabase.from('profiles').select('trial_end_date, is_trial_active, is_subscribed').eq('id', userId).maybeSingle()
-      ])
+
+      const { dailyPlans: dPlans = [], submissions: subs = [], profile } = result.data
+
       
       if (cancelled) return
 
       // 1. Trial Status
-      const tStatus = getTrialStatus(profileRes.data)
+      const tStatus = getTrialStatus(profile)
       setTrialStatus(tStatus)
 
       // 2. Progress Calculations
-      const dailyPlans = plansRes.data || []
-      const submissions = subsRes.data || []
+      const dailyPlans = dPlans || []
+      const submissions = subs || []
       
       const daysSubmittedCount = submissions.length
       const calculatedCurrentDay = daysSubmittedCount + 1

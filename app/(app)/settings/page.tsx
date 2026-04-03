@@ -8,7 +8,7 @@ import { Switch } from '@/components/ui/switch'
 import { GlowButton } from '@/components/glow-button'
 import { useState, type ReactNode, useEffect } from 'react'
 import { cn } from '@/lib/utils'
-import { supabase } from '@/lib/supabase'
+
 import { useTheme } from 'next-themes'
 import {
   AlertDialog,
@@ -73,13 +73,13 @@ export default function SettingsPage() {
     setMounted(true)
     let cancelled = false
     ;(async () => {
-      const { data: { session } } = await supabase.auth.getSession()
+      const session = await import('next-auth/react').then(m => m.getSession())
       if (cancelled) return
       if (!session?.user?.id) return router.push('/signin')
 
       setAuthUserId(session.user.id)
 
-      const { data: profile } = await supabase.from('profiles').select('is_subscribed').eq('id', session.user.id).maybeSingle()
+      const profile = await import('@/app/actions/user').then(m => m.getUserProfileData())
 
       if (!cancelled && profile) {
         setIsSubscribed(!!profile.is_subscribed)
