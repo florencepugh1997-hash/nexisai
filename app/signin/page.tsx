@@ -91,20 +91,30 @@ export default function SignInPage() {
               error={errors.email}
               placeholder="you@company.com"
             />
-            <GlowInput
-              label="Password"
-              name="password"
-              type="password"
-              autoComplete="current-password"
-              value={form.password}
-              onChange={(e) => {
-                setForm((s) => ({ ...s, password: e.target.value }))
-                if (errors.password) setErrors((er) => ({ ...er, password: '' }))
-                if (formError) setFormError(null)
-              }}
-              error={errors.password}
-              placeholder="••••••••"
-            />
+            <div>
+              <GlowInput
+                label="Password"
+                name="password"
+                type="password"
+                autoComplete="current-password"
+                value={form.password}
+                onChange={(e) => {
+                  setForm((s) => ({ ...s, password: e.target.value }))
+                  if (errors.password) setErrors((er) => ({ ...er, password: '' }))
+                  if (formError) setFormError(null)
+                }}
+                error={errors.password}
+                placeholder="••••••••"
+              />
+              <div className="mt-2 text-right">
+                <Link
+                  href="/forgot-password"
+                  className="text-xs text-muted-foreground hover:text-primary hover:underline transition-colors"
+                >
+                  Forgot password?
+                </Link>
+              </div>
+            </div>
 
             {formError ? (
               <p className="text-sm text-destructive" role="alert">

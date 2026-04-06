@@ -18,6 +18,7 @@ export default function SignUpPage() {
     fullName: '',
     email: '',
     password: '',
+    confirmPassword: '',
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [formError, setFormError] = useState<string | null>(null)
@@ -32,6 +33,9 @@ export default function SignUpPage() {
     if (!form.password) e.password = 'Password is required'
     else if (form.password.length < 8)
       e.password = 'At least 8 characters'
+    if (!form.confirmPassword) e.confirmPassword = 'Please confirm your password'
+    else if (form.confirmPassword !== form.password)
+      e.confirmPassword = 'Passwords do not match'
     setErrors(e)
     return Object.keys(e).length === 0
   }
@@ -129,6 +133,16 @@ export default function SignUpPage() {
               value={form.password}
               onChange={onChange('password')}
               error={errors.password}
+              placeholder="••••••••"
+            />
+            <GlowInput
+              label="Confirm Password"
+              name="confirmPassword"
+              type="password"
+              autoComplete="new-password"
+              value={form.confirmPassword}
+              onChange={onChange('confirmPassword')}
+              error={errors.confirmPassword}
               placeholder="••••••••"
             />
 

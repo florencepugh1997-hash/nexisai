@@ -131,3 +131,13 @@ model VerificationToken {
 
   @@unique([identifier, token])
 }
+
+model PasswordResetToken {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  email     String
+  tokenHash String
+  expires   DateTime
+  createdAt DateTime @default(now())
+
+  @@index([email])
+}

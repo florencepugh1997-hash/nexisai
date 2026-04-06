@@ -119,3 +119,24 @@ export async function sendPaymentConfirmationEmail(to: string, name: string) {
     html: getEmailTemplate(content)
   })
 }
+
+export async function sendPasswordResetEmail(to: string, otp: string) {
+  const content = `
+    <h2 style="color: #f4f4f5; margin-bottom: 16px;">Reset Your Password</h2>
+    <p>We received a request to reset the password for your Nexis account.</p>
+    <p>Use the verification code below. It expires in <strong>15 minutes</strong>.</p>
+    <div style="text-align: center; margin: 40px 0;">
+      <div style="display: inline-block; background-color: #111827; border: 2px solid #00E887; border-radius: 16px; padding: 24px 40px;">
+        <p style="margin: 0 0 8px 0; font-size: 13px; color: #6b7280; letter-spacing: 2px; text-transform: uppercase;">Your Code</p>
+        <p style="margin: 0; font-size: 42px; font-weight: 900; color: #00E887; letter-spacing: 12px; font-family: monospace;">${otp}</p>
+      </div>
+    </div>
+    <p style="font-size: 14px; color: #6b7280;">If you didn't request a password reset, you can safely ignore this email. Your account is secure.</p>
+  `
+  return resend.emails.send({
+    from: FROM_EMAIL,
+    to: [to],
+    subject: 'Your Nexis password reset code',
+    html: getEmailTemplate(content)
+  })
+}
