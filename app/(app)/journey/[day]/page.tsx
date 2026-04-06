@@ -211,14 +211,11 @@ export default function DailyPlanPage({ params }: { params: Promise<{ day: strin
 
         if (subData) {
           setSubmission(subData)
-          setIsFormUnlocked(true)
-        } else {
-          const openedAtStr = currentPlan.first_opened_at?.toISOString?.() ?? (currentPlan.first_opened_at as any as string) ?? new Date().toISOString()
-          updateTimer(openedAtStr)
-          const timerInterval = setInterval(() => updateTimer(openedAtStr), 1000)
-          setLoading(false)
-          return () => clearInterval(timerInterval)
         }
+        // Form is always unlocked once the plan is open
+        setIsFormUnlocked(true)
+        setLoading(false)
+        return
 
       } catch (err) {
         console.error(err)
@@ -493,6 +490,18 @@ export default function DailyPlanPage({ params }: { params: Promise<{ day: strin
             </p>
           </Card>
         ) : (
+          <>
+            <div className="mb-6 flex items-start gap-3 rounded-xl border border-yellow-500/30 bg-yellow-500/10 px-4 py-4">
+              <svg xmlns="http://www.w3.org/2000/svg" className="mt-0.5 h-5 w-5 shrink-0 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+              </svg>
+              <div>
+                <p className="text-sm font-semibold text-yellow-400">Before you fill this form</p>
+                <p className="mt-1 text-xs text-yellow-300/80">
+                  Make sure you have actually completed Day {dayNumber}&apos;s tasks first. This form is a reflection of real actions you took today — not a plan for what you&apos;ll do. Only submit once you&apos;ve done the work.
+                </p>
+              </div>
+            </div>
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-3">
               <Label className="text-base text-foreground">Did you complete today's main task?</Label>
@@ -601,6 +610,7 @@ export default function DailyPlanPage({ params }: { params: Promise<{ day: strin
               )}
             </GlowButton>
           </form>
+          </>
         )}
       </div>
     </div>
