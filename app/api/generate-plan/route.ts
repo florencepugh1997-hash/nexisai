@@ -66,7 +66,7 @@ export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) {
-       return Response.json({ error: 'Unauthorized' }, { status: 401 })
+      return Response.json({ error: 'Unauthorized' }, { status: 401 })
     }
     const userId = session.user.id
 
@@ -104,7 +104,7 @@ export async function POST(request: Request) {
       const v = profile[k] as string | null | undefined
       return v == null || (typeof v === 'string' && !v.trim())
     })
-    
+
     if (missing.length) {
       return Response.json(
         { error: `Missing required fields: ${missing.join(', ')}` },
@@ -133,7 +133,7 @@ export async function POST(request: Request) {
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-5',
+        model: 'claude-opus-4-6',
         max_tokens: 8192,
         stream: false,
         messages: [{ role: 'user', content: prompt }],
@@ -177,12 +177,12 @@ export async function POST(request: Request) {
       const baseUrl = request.headers.get('origin') || `http://localhost:${process.env.PORT || 3000}`
       fetch(`${baseUrl}/api/generate-daily-plan`, {
         method: 'POST',
-        headers: { 
-           'Content-Type': 'application/json',
-           cookie: headersList.cookie || ''
+        headers: {
+          'Content-Type': 'application/json',
+          cookie: headersList.cookie || ''
         },
-        body: JSON.stringify({ 
-          growth_plan_id: insertedPlan.id 
+        body: JSON.stringify({
+          growth_plan_id: insertedPlan.id
         })
       }).catch(err => console.error('Failed background day 1 generation', err))
     } catch (e) {

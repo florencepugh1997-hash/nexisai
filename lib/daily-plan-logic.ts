@@ -149,7 +149,7 @@ export async function generateDailyPlanLogic({ user_id, day_number, growth_plan_
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-5',
+      model: 'claude-opus-4-6',
       max_tokens: 4000,
       stream: false,
       messages: [{ role: 'user', content: prompt }],
@@ -378,7 +378,7 @@ export async function generateDailyPlanStream({ user_id, day_number, growth_plan
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-5',
+      model: 'claude-opus-4-6',
       max_tokens: 4000,
       stream: true,
       messages: [{ role: 'user', content: prompt }],
@@ -396,21 +396,21 @@ export async function generateDailyPlanStream({ user_id, day_number, growth_plan
         controller.close();
         return;
       }
-      
+
       const encoder = new TextEncoder();
       const decoder = new TextDecoder('utf-8');
       let buffer = '';
       let fullPlanContent = '';
-      
+
       try {
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
-          
+
           buffer += decoder.decode(value, { stream: true });
           const lines = buffer.split('\n');
           buffer = lines.pop() || '';
-          
+
           for (const line of lines) {
             if (line.startsWith('data: ') && line !== 'data: [DONE]') {
               try {
@@ -425,16 +425,16 @@ export async function generateDailyPlanStream({ user_id, day_number, growth_plan
             }
           }
         }
-        
+
         // flush remaining buffer
         if (buffer.startsWith('data: ') && buffer !== 'data: [DONE]') {
-           try {
-             const data = JSON.parse(buffer.slice(6));
-             if (data.type === 'content_block_delta' && data.delta?.text) {
-               fullPlanContent += data.delta.text;
-               controller.enqueue(encoder.encode(data.delta.text));
-             }
-           } catch { }
+          try {
+            const data = JSON.parse(buffer.slice(6));
+            if (data.type === 'content_block_delta' && data.delta?.text) {
+              fullPlanContent += data.delta.text;
+              controller.enqueue(encoder.encode(data.delta.text));
+            }
+          } catch { }
         }
 
         controller.close();
