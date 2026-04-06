@@ -1,4 +1,5 @@
 export const NEXIS_USER_KEY = 'nexis.user.v1'
+export const nexisUserKey = (email: string) => `nexis.user.v2.${email.toLowerCase().trim()}`
 
 export type GrowthStage = 'early' | 'growing' | 'scaling'
 
@@ -19,9 +20,14 @@ export type NexisUser = {
   trialStartedAt?: string
 }
 
-export function readNexisUser(): NexisUser | null {
+export function readNexisUser(email?: string): NexisUser | null {
   if (typeof window === 'undefined') return null
   try {
+    // Try email-scoped key first, fall back to legacy global key
+    if (email) {
+      const raw = localStorage.getItem(nexisUserKey(email))
+      if (raw) return JSON.parse(raw) as NexisUser
+    }
     const raw = localStorage.getItem(NEXIS_USER_KEY)
     if (!raw) return null
     return JSON.parse(raw) as NexisUser
@@ -31,7 +37,11 @@ export function readNexisUser(): NexisUser | null {
 }
 
 export function writeNexisUser(user: NexisUser) {
-  localStorage.setItem(NEXIS_USER_KEY, JSON.stringify(user))
+  if (user.email) {
+    localStorage.setItem(nexisUserKey(user.email), JSON.stringify(user))
+  } else {
+    localStorage.setItem(NEXIS_USER_KEY, JSON.stringify(user))
+  }
 }
 
 export function patchNexisUser(patch: Partial<NexisUser>) {
@@ -41,7 +51,11 @@ export function patchNexisUser(patch: Partial<NexisUser>) {
   return next
 }
 
-export function clearNexisUser() {
+export function clearNexisUser(email?: string) {
+  if (email) {
+    localStorage.removeItem(nexisUserKey(email))
+  }
+  // Always clear legacy key too
   localStorage.removeItem(NEXIS_USER_KEY)
 }
 

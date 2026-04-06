@@ -37,9 +37,11 @@ export function NexisUserProvider({ children }: { children: React.ReactNode }) {
   const { data: session, status } = useSession()
 
   useEffect(() => {
-    setUserState(readNexisUser())
+    // Read scoped to the session email if available, else read legacy
+    const email = session?.user?.email ?? undefined
+    setUserState(readNexisUser(email))
     setHydrated(true)
-  }, [])
+  }, [session?.user?.email])
 
   const refreshUser = useCallback(async () => {
     if (!session?.user?.id) return
@@ -99,10 +101,10 @@ export function NexisUserProvider({ children }: { children: React.ReactNode }) {
     try {
       await nextAuthSignOut({ redirect: false })
     } finally {
-      clearNexisUser()
+      clearNexisUser(user?.email)
       setUserState(null)
     }
-  }, [])
+  }, [user?.email])
 
   const trialDaysRemaining = useMemo(() => trialDaysLeft(user), [user])
 
