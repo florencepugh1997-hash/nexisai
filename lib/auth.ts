@@ -54,15 +54,36 @@ export const authOptions: NextAuthOptions = {
   },
   callbacks: {
     async signIn({ user, account }) {
-      // For Google sign-ins, ensure a Profile record exists
+      // For Google sign-ins, ensure user + Profile exist in MongoDB
       if (account?.provider === "google" && user?.email) {
         try {
-          const dbUser = await prisma.user.findUnique({
+          let dbUser = await prisma.user.findUnique({
             where: { email: user.email.toLowerCase() },
             include: { profile: true },
           });
 
-          if (dbUser && !dbUser.profile) {
+          if (!dbUser) {
+            // First-time Google sign-in: create user + profile
+            const now = new Date();
+            dbUser = await prisma.user.create({
+              data: {
+                email: user.email.toLowerCase(),
+                name: user.name ?? user.email.split("@")[0],
+                image: user.image ?? null,
+                profile: {
+                  create: {
+                    full_name: user.name ?? user.email.split("@")[0],
+                    trial_start_date: now,
+                    trial_end_date: new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000),
+                    is_trial_active: true,
+                    is_subscribed: false,
+                  },
+                },
+              },
+              include: { profile: true },
+            });
+          } else if (!dbUser.profile) {
+            // User exists but missing profile
             const now = new Date();
             await prisma.profile.create({
               data: {
@@ -76,7 +97,7 @@ export const authOptions: NextAuthOptions = {
             });
           }
         } catch (err) {
-          console.error("Google signIn profile setup error:", err);
+          console.error("Google signIn DB setup error:", err);
         }
       }
       return true;
@@ -85,8 +106,9 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.id = user.id;
       }
-      // For Google, fetch DB user id by email if not set
-      if (account?.provider === "google" && !token.id && token.email) {
+      // For Google: always resolve real MongoDB ObjectId (Google's user.id is
+      // a long numeric string, not a valid MongoDB ObjectId — this fixes it)
+      if (account?.provider === "google" && token.email) {
         const dbUser = await prisma.user.findUnique({
           where: { email: (token.email as string).toLowerCase() },
         });
