@@ -541,10 +541,9 @@ export default function DailyPlanPage({ params }: { params: Promise<{ day: strin
 
             <div className="space-y-3">
               <Label className="text-base text-foreground">What did you actually do today?</Label>
-              <p className="text-xs text-muted-foreground pb-1">Be specific. What actions did you take? (min 50 characters)</p>
+              <p className="text-xs text-muted-foreground pb-1">Be specific. What actions did you take?</p>
               <textarea
                 required
-                minLength={50}
                 value={formData.what_i_did}
                 onChange={(e) => setFormData(s => ({ ...s, what_i_did: e.target.value }))}
                 className="min-h-[100px] w-full rounded-xl border border-border/60 bg-card px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary resize-none"
@@ -613,15 +612,15 @@ export default function DailyPlanPage({ params }: { params: Promise<{ day: strin
 
             <GlowButton
               type="submit"
-              className="w-full rounded-xl"
-              disabled={isSubmitting || !formData.completed_main_task || formData.what_i_did.length < 50}
+              className="w-full rounded-xl glow-primary"
+              disabled={isSubmitting || !formData.completed_main_task || formData.what_i_did.trim() === ''}
             >
               {isSubmitting ? (
                 <span className="flex items-center gap-2">
                   <Loader2 className="h-4 w-4 animate-spin" /> Saving...
                 </span>
               ) : (
-                `Submit & Unlock Day ${dayNumber + 1}`
+                `Submit Feedback`
               )}
             </GlowButton>
           </form>
