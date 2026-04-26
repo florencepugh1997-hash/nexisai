@@ -9,23 +9,23 @@ import { Check } from 'lucide-react'
 
 
 const features = [
-  'Full 90-day growth roadmap unlocked',
-  'Phase-by-phase playbooks & milestones',
-  'Weekly action templates & checklists',
-  'Industry benchmarks & competitor angles',
-  'Export & share with your team',
-  'Priority in-app support',
+  'AI-driven 90-day growth roadmap',
+  'Automated phase-by-phase playbooks',
+  'Time-saving weekly action templates',
+  'Data-backed industry benchmarks',
+  'One-click export for team alignment',
+  'Priority 24/7 in-app support',
 ]
 
 export default function UpgradePage() {
   const router = useRouter()
-  const [billing, setBilling] = useState<'monthly' | 'annual'>('monthly')
+  const [billing, setBilling] = useState<'monthly' | 'quarterly'>('monthly')
   const [loading, setLoading] = useState(false)
   const [cancelMsg, setCancelMsg] = useState<string | null>(null)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
-  // Amount in kobo: $19 = 1900000 kobo (monthly), $15 = 1500000 (annual)
-  const amount = billing === 'monthly' ? 1900000 : 18000000 // $15 × 12 months in kobo
+  // Amount in kobo: 19,000 NGN (monthly), 51,000 NGN (quarterly / 17k * 3)
+  const amount = billing === 'monthly' ? 1900000 : 5100000 // 51,000 NGN in kobo
 
   async function handleSubscribe() {
     setLoading(true)
@@ -113,19 +113,19 @@ export default function UpgradePage() {
           </button>
           <button
             type="button"
-            onClick={() => setBilling('annual')}
+            onClick={() => setBilling('quarterly')}
             className={cn(
               'rounded-full px-4 py-2 text-sm font-semibold transition-colors',
-              billing === 'annual'
+              billing === 'quarterly'
                 ? 'bg-primary text-primary-foreground'
                 : 'text-muted-foreground hover:text-foreground',
             )}
           >
-            Annual · 15,000 NGN/mo
+            Quarterly · 17,000 NGN/mo
           </button>
         </div>
         <p className="mt-2 text-xs text-muted-foreground">
-          Billed {billing === 'monthly' ? 'monthly' : 'annually'}
+          {billing === 'monthly' ? 'Billed 19,000 NGN monthly' : 'Billed 51,000 NGN every 3 months'}
         </p>
 
         <ul className="mt-10 space-y-3 text-left">
