@@ -149,7 +149,7 @@ export async function generateDailyPlanLogic({ user_id, day_number, growth_plan_
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-3-haiku-20240307',
+      model: 'claude-haiku-4-5',
       max_tokens: 4000,
       stream: false,
       messages: [{ role: 'user', content: prompt }],
@@ -378,7 +378,7 @@ export async function generateDailyPlanStream({ user_id, day_number, growth_plan
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-3-haiku-20240307',
+      model: 'claude-haiku-4-5',
       max_tokens: 4000,
       stream: true,
       messages: [{ role: 'user', content: prompt }],
