@@ -457,14 +457,24 @@ export default function DailyPlanPage({ params }: { params: Promise<{ day: strin
             <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary mb-2">
               <Check className="h-6 w-6" />
             </div>
-            <h4 className="font-display text-xl font-semibold">Submitted ✓</h4>
-            <p className="text-muted-foreground">Your progress has been recorded. Keep up the momentum!</p>
+            <h4 className="font-display text-xl font-semibold text-primary">Feedback Submitted Successfully ✓</h4>
+            <div className="space-y-2">
+              <p className="text-muted-foreground">
+                Your feedback has been recorded and will be used by our AI to tailor and make plans for your next day.
+              </p>
+              <p className="text-sm text-foreground/80 font-medium">
+                The next day will be available after some time in order to make sure today's plan is completely internalized and executed.
+              </p>
+            </div>
 
             {nextUnlockAt && unlockTimeLeft ? (
               <div className="mt-6 flex flex-col items-center space-y-3">
-                <p className="font-medium text-foreground">
-                  Next Day unlocks in <span className="text-primary">{unlockTimeLeft.hours}h {unlockTimeLeft.minutes}m {unlockTimeLeft.seconds}s</span>
-                </p>
+                <div className="rounded-xl bg-background border border-border/50 px-6 py-3 w-full max-w-sm">
+                  <p className="text-sm font-medium text-muted-foreground">Next Day unlocks in</p>
+                  <p className="text-2xl font-bold font-display text-primary mt-1">
+                    {unlockTimeLeft.hours}h {unlockTimeLeft.minutes}m {unlockTimeLeft.seconds}s
+                  </p>
+                </div>
                 {!trialStatus?.isSubscribed && (
                   <Link href="/upgrade" className="inline-flex rounded-xl bg-primary/10 px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary/20">
                     Skip the wait — Go Pro
@@ -472,7 +482,7 @@ export default function DailyPlanPage({ params }: { params: Promise<{ day: strin
                 )}
               </div>
             ) : (
-              <GlowButton type="button" onClick={handleNextDay} disabled={isUnlocking} className="mt-4">
+              <GlowButton type="button" onClick={handleNextDay} disabled={isUnlocking} className="mt-4 glow-primary">
                 {isUnlocking ? <Loader2 className="mr-2 h-4 w-4 animate-spin inline" /> : null}
                 Unlock Next Day
               </GlowButton>
