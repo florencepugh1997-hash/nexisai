@@ -204,6 +204,9 @@ export default function DailyPlanPage({ params }: { params: Promise<{ day: strin
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ current_day_number: dayNumber })
             }).catch(console.error)
+          } else {
+            // Plan is locked for the next day, set nextUnlockAt
+            setNextUnlockAt(new Date(openedAt + (16 * 60 * 60 * 1000)).toISOString())
           }
         }
 
@@ -462,9 +465,11 @@ export default function DailyPlanPage({ params }: { params: Promise<{ day: strin
                 <p className="font-medium text-foreground">
                   Next Day unlocks in <span className="text-primary">{unlockTimeLeft.hours}h {unlockTimeLeft.minutes}m {unlockTimeLeft.seconds}s</span>
                 </p>
-                <Link href="/upgrade" className="inline-flex rounded-xl bg-primary/10 px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary/20">
-                  Skip the wait — Go Pro
-                </Link>
+                {!trialStatus?.isSubscribed && (
+                  <Link href="/upgrade" className="inline-flex rounded-xl bg-primary/10 px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary/20">
+                    Skip the wait — Go Pro
+                  </Link>
+                )}
               </div>
             ) : (
               <GlowButton type="button" onClick={handleNextDay} disabled={isUnlocking} className="mt-4">

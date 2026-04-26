@@ -3,7 +3,7 @@ import { Resend } from 'resend'
 const resend = new Resend(process.env.RESEND_API_KEY)
 
 // TODO: Replace with your custom domain email before launch
-const FROM_EMAIL = 'hello@nexis.ng'
+const FROM_EMAIL = 'justin@nexis.ng'
 
 const STYLES = {
   container: 'background-color: #0A0A0F; color: #f4f4f5; font-family: sans-serif; padding: 40px 20px; text-align: center;',
@@ -36,7 +36,7 @@ export async function sendWelcomeEmail(to: string, name: string) {
     <p>Our AI is currently analyzing your business to generate your personalized 90-day growth plan. It will be ready in the dashboard shortly.</p>
     <p>If you haven't finished your onboarding details, now is the perfect time to complete them so we can make your plan as accurate as possible.</p>
     <div style="text-align: center; margin-top: 32px;">
-      <a href="https://nexis.ai/dashboard" style="${STYLES.button}">Go to My Dashboard</a>
+      <a href="https://nexis.ng/dashboard" style="${STYLES.button}">Go to My Dashboard</a>
     </div>
     <p style="margin-top: 32px;">Best,<br/>The Nexis Team</p>
   `
@@ -55,7 +55,7 @@ export async function sendTrialEndingSoonEmail(to: string, name: string, daysLef
     <p>You've already started mapping out your growth with access to your personalized AI strategy and daily journey.</p>
     <p><strong>Don't lose access</strong> to your 90-day growth plan when the trial ends. Everything you've built is saved and ready for the next phase.</p>
     <div style="text-align: center; margin-top: 32px;">
-      <a href="https://nexis.ai/upgrade" style="${STYLES.button}">Subscribe to Nexis Pro — $19/month</a>
+      <a href="https://nexis.ng/upgrade" style="${STYLES.button}">Subscribe to Nexis Pro — $19/month</a>
     </div>
     <p style="font-size: 14px; color: #4b5563; margin-top: 16px; text-align: center;">Cancel anytime. No hidden fees.</p>
   `
@@ -74,7 +74,7 @@ export async function sendLastDayReminderEmail(to: string, name: string) {
     <p>Tomorrow, your personalized growth plan and daily journey will lock.</p>
     <p>Keep your momentum going and unlock the full 90-day experience today.</p>
     <div style="text-align: center; margin-top: 32px;">
-      <a href="https://nexis.ai/upgrade" style="${STYLES.button}">Subscribe Now and Keep Access</a>
+      <a href="https://nexis.ng/upgrade" style="${STYLES.button}">Subscribe Now and Keep Access</a>
     </div>
   `
   return resend.emails.send({
@@ -91,7 +91,7 @@ export async function sendTrialExpiredEmail(to: string, name: string) {
     <p>Hi ${name}, your Nexis trial has officially ended.</p>
     <p>Don't worry—your growth plan and all your progress are safely saved. You can pick up exactly where you left off as soon as you reactivate.</p>
     <div style="text-align: center; margin-top: 32px;">
-      <a href="https://nexis.ai/upgrade" style="${STYLES.button}">Reactivate My Plan</a>
+      <a href="https://nexis.ng/upgrade" style="${STYLES.button}">Reactivate My Plan</a>
     </div>
     <p style="margin-top: 24px;">Your 90-day strategy is waiting for you.</p>
   `
@@ -109,7 +109,7 @@ export async function sendPaymentConfirmationEmail(to: string, name: string) {
     <p>Congratulations, ${name}! You're now a Nexis Pro member.</p>
     <p>Your full 90-day growth plan and daily journey are completely unlocked. Your AI growth strategist is with you every step of the way.</p>
     <div style="text-align: center; margin-top: 32px;">
-      <a href="https://nexis.ai/journey" style="${STYLES.button}">Continue My Journey</a>
+      <a href="https://nexis.ng/journey" style="${STYLES.button}">Continue My Journey</a>
     </div>
   `
   return resend.emails.send({

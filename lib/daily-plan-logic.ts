@@ -276,11 +276,17 @@ export async function unlockNextDayLogic({ user_id, current_day_number, force = 
     throw new Error('Current day plan not found');
   }
 
+  const userProfile = await prisma.profile.findUnique({
+    where: { userId: user_id },
+    select: { is_subscribed: true }
+  });
+  const isSubscribed = !!userProfile?.is_subscribed;
+
   if (!currentPlan.first_opened_at && !force) {
     return { unlocked: false, reason: "Day not opened yet" };
   }
 
-  let canUnlock = force;
+  let canUnlock = force || isSubscribed;
 
   if (!canUnlock && currentPlan.first_opened_at) {
     const openedAt = new Date(currentPlan.first_opened_at).getTime();
@@ -290,8 +296,7 @@ export async function unlockNextDayLogic({ user_id, current_day_number, force = 
     if (now >= unlockTime) {
       canUnlock = true;
     } else {
-      const hoursRemaining = (unlockTime - now) / (1000 * 60 * 60);
-      return { unlocked: false, hours_remaining: hoursRemaining };
+      return { unlocked: false, next_unlock_at: new Date(unlockTime).toISOString() };
     }
   }
 
