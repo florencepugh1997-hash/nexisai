@@ -17,12 +17,9 @@ export function NexisCard({
     <Card
       {...props}
       className={cn(
-        'bg-card border border-border/50 rounded-xl transition-all duration-300',
-        variant === 'glow' && 'border-primary/25 glow-sm hover:border-primary/40',
-        variant === 'gradient' && [
-          'bg-card border-primary/20',
-        ],
-        'hover:shadow-lg hover:border-border',
+        'glass-card rounded-xl transition-all duration-300',
+        variant === 'glow' && 'border-primary/25 glow-sm',
+        variant === 'gradient' && 'border-primary/20',
         className,
       )}
     >

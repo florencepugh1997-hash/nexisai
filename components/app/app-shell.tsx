@@ -49,10 +49,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   )
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-background text-foreground">
+    <div className="flex h-screen w-full overflow-hidden bg-background text-foreground glass-mesh-bg">
       {/* ── Fixed sidebar (desktop) ── */}
-      <aside className="hidden h-full w-56 shrink-0 flex-col border-r border-border/60 bg-sidebar md:flex">
-        <div className="h-14 shrink-0 border-b border-border/60 px-3 pt-4">
+      <aside className="hidden h-full w-56 shrink-0 flex-col glass-sidebar md:flex">
+        <div className="h-14 shrink-0 border-b border-[var(--glass-border)] px-3 pt-4">
           <p className="px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
             Menu
           </p>
@@ -64,13 +64,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* ── Right column: fixed topbar + scrollable content ── */}
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <header className="z-20 flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border/60 bg-sidebar/95 px-4 backdrop-blur-md">
+        <header className="glass-nav z-20 flex h-14 shrink-0 items-center justify-between gap-3 border-b px-4">
           <NexisWordmark href="/dashboard" />
           <div className="flex-1" />
           <div className="flex items-center gap-2">
             <Link
               href="/settings/profile"
-              className="group relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border/60 transition-all hover:border-primary/50 hover:ring-2 hover:ring-primary/20"
+              className="group relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--glass-border)] transition-all hover:border-primary/50 hover:ring-2 hover:ring-primary/20"
               aria-label="Profile"
             >
               <Avatar className="h-full w-full">
@@ -93,8 +93,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </main>
       </div>
 
+      {/* ── Mobile bottom nav ── */}
       <nav
-        className="fixed bottom-0 left-0 right-0 z-30 flex border-t border-border/60 bg-sidebar/98 px-2 py-2 backdrop-blur-md md:hidden"
+        className="glass-nav fixed bottom-0 left-0 right-0 z-30 flex border-t px-2 py-2 md:hidden"
         aria-label="Mobile"
       >
         {nav.map(({ href, label, icon: Icon }) => {
@@ -104,8 +105,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               key={href}
               href={href}
               className={cn(
-                'flex flex-1 flex-col items-center gap-0.5 rounded-lg py-1.5 text-[10px] font-medium',
-                active ? 'text-primary' : 'text-muted-foreground',
+                'flex flex-1 flex-col items-center gap-0.5 rounded-xl py-1.5 text-[10px] font-medium transition-all duration-200',
+                active
+                  ? 'glass-tab-active text-primary'
+                  : 'text-muted-foreground hover:text-foreground',
               )}
             >
               <Icon className="h-5 w-5" />
