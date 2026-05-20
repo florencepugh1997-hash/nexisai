@@ -24,8 +24,8 @@ export default function UpgradePage() {
   const [cancelMsg, setCancelMsg] = useState<string | null>(null)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
-  // Amount in kobo: 750,000 NGN (monthly), 51,000 NGN (quarterly / 17k * 3)
-  const amount = billing === 'monthly' ? 75000000 : 5100000 // 51,000 NGN in kobo
+  // Amount in kobo: 19,000 NGN (monthly), 51,000 NGN (quarterly / 17k * 3)
+  const amount = billing === 'monthly' ? 1900000 : 5100000 // 51,000 NGN in kobo
 
   async function handleSubscribe() {
     setLoading(true)
@@ -109,7 +109,7 @@ export default function UpgradePage() {
                 : 'text-muted-foreground hover:text-foreground',
             )}
           >
-            Monthly · 750,000 NGN/mo
+            Monthly · 19,000 NGN/mo
           </button>
           <button
             type="button"
@@ -125,7 +125,7 @@ export default function UpgradePage() {
           </button>
         </div>
         <p className="mt-2 text-xs text-muted-foreground">
-          {billing === 'monthly' ? 'Billed 750,000 NGN monthly' : 'Billed 51,000 NGN every 3 months'}
+          {billing === 'monthly' ? 'Billed 19,000 NGN monthly' : 'Billed 51,000 NGN every 3 months'}
         </p>
 
         <ul className="mt-10 space-y-3 text-left">
